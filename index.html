@@ -1,0 +1,2569 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<title>ДЕЛЬТА — Mobile</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<meta name="theme-color" content="#0a0a0f"/>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@300;500;600;700;800;900&family=Manrope:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+<!-- Telegram Mini App SDK (работает молча если открыт в браузере, вне Telegram) -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:
+      radial-gradient(1200px 800px at 70% 110%, #141420 0%, transparent 60%),
+      radial-gradient(900px 700px at 10% -10%, #181820 0%, transparent 55%),
+      #0a0a0f;
+    color:#e9e9ec;
+    font-family:'Manrope',system-ui,sans-serif;
+    min-height:100vh;
+    display:flex; align-items:center; justify-content:center;
+    padding: 24px;
+    overflow:auto;
+  }
+  /* Telegram Mini App режим: растягиваем на весь экран мессенджера */
+  body.tma{
+    padding: 0;
+    background: var(--tg-theme-bg-color, #050507);
+    align-items: stretch;
+    justify-content: stretch;
+  }
+  body.tma::before{ display:none; }
+  body.tma .chrome{ display:none; }
+  body.tma .stage{ width:100%; height:100vh; display:flex; }
+  body.tma #root{ width:100%; height:100%; }
+  body.light{
+    background:
+      radial-gradient(1200px 800px at 70% 110%, #e4e8ee 0%, transparent 60%),
+      radial-gradient(900px 700px at 10% -10%, #edf0f4 0%, transparent 55%),
+      #eef0f4;
+  }
+  body::before{
+    content:"";position:fixed;inset:0;
+    background-image:
+      linear-gradient(to right, rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 64px 64px;
+    pointer-events:none; z-index:0;
+    mask-image: radial-gradient(ellipse at center, #000 30%, transparent 85%);
+  }
+  body.light::before{
+    background-image:
+      linear-gradient(to right, rgba(0,0,0,.035) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(0,0,0,.035) 1px, transparent 1px);
+  }
+  .stage{ position:relative; z-index:1; }
+  .chrome{
+    position:fixed; inset:0; padding:22px 28px; z-index:5; pointer-events:none;
+    display:flex; flex-direction:column; justify-content:space-between;
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+    color:rgba(255,255,255,.35);
+  }
+  body.light .chrome{ color: rgba(0,0,0,.4); }
+  .chrome .row{display:flex;justify-content:space-between;gap:24px}
+  .wordmark{
+    font-family:'Unbounded',sans-serif;font-weight:800;
+    font-size:15px;letter-spacing:.01em;color:inherit;text-transform:none;
+  }
+  .wordmark .accent{color:#d9fb4a}
+
+  input[type=range]{
+    appearance:none; background:rgba(255,255,255,.08);
+    height:3px; border-radius:3px;
+  }
+  body.light input[type=range]{ background:rgba(0,0,0,.08); }
+  input[type=range]::-webkit-slider-thumb{
+    appearance:none; width:16px; height:16px; border-radius:50%;
+    background:#d9fb4a; cursor:pointer; box-shadow: 0 0 0 3px rgba(217,251,74,.18);
+  }
+
+  ::-webkit-scrollbar{ width: 0; height: 0; }
+
+  @media (max-width: 480px){
+    body{ padding: 0; }
+    .chrome{ display: none; }
+  }
+</style>
+</head>
+<body class="dark">
+
+<div class="chrome">
+  <div class="row">
+    <div class="wordmark">ДЕЛ<span class="accent">Ь</span>ТА</div>
+    <div>МОБИЛЬНОЕ ПРИЛОЖЕНИЕ · ПРОТОТИП</div>
+  </div>
+  <div class="row">
+    <div>DEMO <span style="color:#d9fb4a">●</span></div>
+    <div>СВАЙП ПО ТАБ-БАРУ</div>
+  </div>
+</div>
+
+<div class="stage">
+  <div id="root"></div>
+</div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+
+<script type="text/babel" data-presets="env,react">
+const { useState, useEffect, useMemo, createContext, useContext, Fragment } = React;
+
+// ══════════════════════════════════════════════════════════════
+//                      UI primitives (Toast, Sheet)
+// ══════════════════════════════════════════════════════════════
+const UIContext = createContext(null);
+const useUI = () => useContext(UIContext);
+
+const UIProvider = ({ children, dark }) => {
+  const [toast, setToast] = useState(null);
+  const [sheet, setSheet] = useState(null);
+
+  const showToast = (text, tone = 'default') => {
+    setToast({ text, tone, id: Date.now() });
+    setTimeout(() => setToast(null), 2000);
+  };
+  const showSheet = (config) => setSheet(config);
+  const closeSheet = () => setSheet(null);
+
+  return (
+    <UIContext.Provider value={{ showToast, showSheet, closeSheet }}>
+      {children}
+      <ToastLayer toast={toast} dark={dark}/>
+      <SheetLayer sheet={sheet} onClose={closeSheet} dark={dark}/>
+    </UIContext.Provider>
+  );
+};
+
+const ToastLayer = ({ toast, dark }) => {
+  if (!toast) return null;
+  const isOk = toast.tone === 'ok';
+  return (
+    <div key={toast.id} style={{
+      position:'absolute', left: '50%', bottom: 110, transform:'translateX(-50%)',
+      padding:'10px 16px', borderRadius: 999,
+      background: isOk ? '#d9fb4a' : (dark ? 'rgba(30,30,36,.96)' : 'rgba(20,20,24,.94)'),
+      color: isOk ? '#0a0a0c' : '#fff',
+      fontFamily:'Manrope', fontSize: 13, fontWeight: 600,
+      boxShadow: '0 12px 36px -8px rgba(0,0,0,.5)',
+      zIndex: 70, animation: 'deltaToast .25s ease-out',
+      whiteSpace:'nowrap', pointerEvents:'none',
+      display:'flex', alignItems:'center', gap: 8,
+    }}>
+      {isOk && (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0a0a0c" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 6L9 17l-5-5"/>
+        </svg>
+      )}
+      {toast.text}
+    </div>
+  );
+};
+
+const SheetLayer = ({ sheet, onClose, dark }) => {
+  if (!sheet) return null;
+  const ink = dark ? '#f0f0f3' : '#16161a';
+  const dim = dark ? 'rgba(255,255,255,.55)' : 'rgba(0,0,0,.55)';
+  const bg = dark ? '#141418' : '#fff';
+  const bord = dark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)';
+
+  return (
+    <div style={{
+      position:'absolute', inset: 0, zIndex: 80,
+      background: 'rgba(0,0,0,.45)', backdropFilter:'blur(3px)',
+      display:'flex', flexDirection:'column', justifyContent:'flex-end',
+      animation:'deltaFade .2s ease-out',
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: bg, color: ink,
+        borderTopLeftRadius: 24, borderTopRightRadius: 24,
+        padding:'16px 20px 28px',
+        animation:'deltaSlideUp .28s cubic-bezier(.2,.8,.2,1)',
+        borderTop: `1px solid ${bord}`,
+      }}>
+        <div style={{
+          width: 40, height: 4, borderRadius: 2, margin:'0 auto 14px',
+          background: dark ? 'rgba(255,255,255,.15)' : 'rgba(0,0,0,.15)',
+        }}/>
+        {sheet.eyebrow && (
+          <div style={{ fontFamily:'JetBrains Mono', fontSize:10, letterSpacing:'.22em', color:dim, textTransform:'uppercase', marginBottom: 6 }}>{sheet.eyebrow}</div>
+        )}
+        <div style={{ fontFamily:'Unbounded', fontWeight:800, fontSize: 20, letterSpacing:'-.01em', marginBottom: 8 }}>{sheet.title}</div>
+        {sheet.body && (
+          <div style={{ fontFamily:'Manrope', fontSize: 14, color: dim, lineHeight: 1.5, marginBottom: 16 }}>{sheet.body}</div>
+        )}
+        {sheet.custom && <div style={{ marginBottom: 16 }}>{sheet.custom}</div>}
+        {sheet.actions && (
+          <div style={{ display:'flex', flexDirection:'column', gap: 8 }}>
+            {sheet.actions.map((a, i) => {
+              const primary = a.kind === 'primary';
+              const danger = a.kind === 'danger';
+              return (
+                <button key={i} onClick={() => { a.onClick?.(); if (!a.keepOpen) onClose(); }} style={{
+                  padding:'14px', borderRadius: 14, cursor:'pointer',
+                  background: primary ? '#d9fb4a' : (dark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.04)'),
+                  color: primary ? '#0a0a0c' : (danger ? '#ff6680' : ink),
+                  border: primary ? 'none' : `1px solid ${bord}`,
+                  fontFamily:'Manrope', fontWeight: primary ? 700 : 600, fontSize: 14,
+                }}>{a.label}</button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+if (!document.getElementById('delta-ui-keyframes')) {
+  const s = document.createElement('style');
+  s.id = 'delta-ui-keyframes';
+  s.textContent = `
+    @keyframes deltaToast { from { opacity: 0; transform: translateX(-50%) translateY(8px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+    @keyframes deltaFade { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes deltaSlideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    @keyframes deltaStepIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+  `;
+  document.head.appendChild(s);
+}
+
+// ══════════════════════════════════════════════════════════════
+//                      iOS frame (simplified)
+// ══════════════════════════════════════════════════════════════
+function IOSStatusBar({ dark = false, time = '9:41' }) {
+  const c = dark ? '#fff' : '#000';
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: '17px 32px 12px', boxSizing: 'border-box',
+      position: 'relative', zIndex: 20, width: '100%',
+    }}>
+      <span style={{
+        fontFamily: '-apple-system, "SF Pro", system-ui', fontWeight: 590,
+        fontSize: 16, color: c, minWidth: 80,
+      }}>{time}</span>
+      <div style={{ width: 126, height: 28 }}/>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 80, justifyContent:'flex-end' }}>
+        <svg width="17" height="11" viewBox="0 0 19 12">
+          <rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill={c}/>
+          <rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill={c}/>
+          <rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill={c}/>
+          <rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill={c}/>
+        </svg>
+        <svg width="15" height="11" viewBox="0 0 17 12">
+          <path d="M8.5 3.2C10.8 3.2 12.9 4.1 14.4 5.6L15.5 4.5C13.7 2.7 11.2 1.5 8.5 1.5C5.8 1.5 3.3 2.7 1.5 4.5L2.6 5.6C4.1 4.1 6.2 3.2 8.5 3.2Z" fill={c}/>
+          <path d="M8.5 6.8C9.9 6.8 11.1 7.3 12 8.2L13.1 7.1C11.8 5.9 10.2 5.1 8.5 5.1C6.8 5.1 5.2 5.9 3.9 7.1L5 8.2C5.9 7.3 7.1 6.8 8.5 6.8Z" fill={c}/>
+          <circle cx="8.5" cy="10.5" r="1.5" fill={c}/>
+        </svg>
+        <svg width="25" height="12" viewBox="0 0 27 13">
+          <rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke={c} strokeOpacity="0.35" fill="none"/>
+          <rect x="2" y="2" width="20" height="9" rx="2" fill={c}/>
+          <path d="M25 4.5V8.5C25.8 8.2 26.5 7.2 26.5 6.5C26.5 5.8 25.8 4.8 25 4.5Z" fill={c} fillOpacity="0.4"/>
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+function IOSDevice({ children, width = 390, height = 844, dark = false }) {
+  return (
+    <div style={{
+      width, height, borderRadius: 48, overflow: 'hidden',
+      position: 'relative', background: dark ? '#000' : '#F2F2F7',
+      boxShadow: '0 40px 80px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.12)',
+      fontFamily: '-apple-system, system-ui, sans-serif',
+      WebkitFontSmoothing: 'antialiased',
+    }}>
+      {/* dynamic island */}
+      <div style={{
+        position: 'absolute', top: 11, left: '50%', transform: 'translateX(-50%)',
+        width: 126, height: 37, borderRadius: 24, background: '#000', zIndex: 50,
+      }} />
+      {/* status bar */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }}>
+        <IOSStatusBar dark={dark} />
+      </div>
+      {/* content area — children handle their own layout & scrolling */}
+      <div style={{ position:'absolute', inset: 0 }}>{children}</div>
+      {/* home indicator */}
+      <div style={{
+        position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 60,
+        height: 34, display: 'flex', justifyContent: 'center', alignItems: 'flex-end',
+        paddingBottom: 8, pointerEvents: 'none',
+      }}>
+        <div style={{
+          width: 139, height: 5, borderRadius: 100,
+          background: dark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.25)',
+        }} />
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+//                      Delta mobile card
+// ══════════════════════════════════════════════════════════════
+const MobileCard = ({
+  pct = 0.15, number = 'DLT 4182 0907 2611',
+  holder = 'ДЕРЖАТЕЛЬ КАРТЫ', valid = '08 / 30',
+  width = 320, variant = 'portrait',
+  hidden = false,
+  dark = true,
+}) => {
+  const portrait = variant === 'portrait';
+  const h = portrait ? width * 1.4 : width * 0.63;
+
+  // ─── Palette per theme ──────────────────────────────────────
+  // dark  — Deep Ink (premium dark)
+  // light — Ivory Platinum (эксклюзивное обслуживание)
+  const palette = dark ? {
+    // Deep Ink theme
+    cardBg: `
+      radial-gradient(ellipse 140% 90% at 50% -10%, #1a1a22 0%, transparent 55%),
+      radial-gradient(ellipse 100% 60% at 50% 110%, #0c0c12 0%, transparent 60%),
+      linear-gradient(165deg, #0a0a0e 0%, #14141a 50%, #0d0d12 100%)
+    `,
+    cardShadow: '0 40px 80px -24px rgba(0,0,0,.85), 0 0 0 1px rgba(255,255,255,.06) inset',
+    guilloche: 'rgba(255,255,255,0.06)',
+    cornerVignette: `
+      radial-gradient(ellipse 40% 30% at 0% 0%,   rgba(0,0,0,.3) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 30% at 100% 0%, rgba(0,0,0,.25) 0%, transparent 70%)
+    `,
+    iridBlend: 'screen',
+    specSweep: 'linear-gradient(128deg, transparent 35%, rgba(255,255,255,.14) 50%, transparent 65%)',
+    rimHighlight: `
+      inset 0 0 0 1px rgba(255,255,255,.08),
+      inset 0 2px 0 rgba(255,255,255,.22),
+      inset 0 -1px 0 rgba(217,251,74,.1),
+      inset 0 -40px 60px -40px rgba(217,251,74,.05)
+    `,
+    wordmarkGrad: 'linear-gradient(160deg, #ffffff 0%, #e0e0e6 100%)',
+    tagline: '#a8a8b0',
+    embossDark: 'rgba(0,0,0,0.55)',
+    embossLight: 'rgba(255,255,255,0.2)',
+    embossBase: 'rgba(255,255,255,0.05)',
+    eyebrow: '#d9fb4a',
+    eyebrowShadow: '0 0 12px rgba(217,251,74,.4)',
+    bigNumGrad: 'linear-gradient(160deg, #ffffff 0%, #ffffff 25%, #c8c8ce 55%, #ffffff 85%, #e8e8ec 100%)',
+    bigNumDrop: 'drop-shadow(0 2px 4px rgba(0,0,0,.3))',
+    percentColor: '#d9fb4a',
+    percentShadow: '0 0 24px rgba(217,251,74,.55), 0 0 48px rgba(217,251,74,.25), 0 0 1px rgba(217,251,74,.8)',
+    labelMuted: 'rgba(255,255,255,.4)',
+    numberText: '#f4f4f8',
+    numberEmboss: '0 1px 0 rgba(0,0,0,.5), 0 -0.5px 0 rgba(255,255,255,.1)',
+    holderText: '#fff',
+    holderEmboss: '0 1px 0 rgba(0,0,0,.4)',
+    validText: '#f4f4f8',
+    microText: 'rgba(255,255,255,.22)',
+  } : {
+    // Ivory Platinum theme — "эксклюзивное обслуживание"
+    cardBg: `
+      radial-gradient(ellipse 140% 90% at 50% -10%, #ffffff 0%, transparent 55%),
+      radial-gradient(ellipse 100% 60% at 50% 110%, #e8e4dc 0%, transparent 60%),
+      linear-gradient(165deg, #faf7f0 0%, #f2ede2 50%, #ebe5d6 100%)
+    `,
+    cardShadow: '0 40px 80px -24px rgba(70,55,30,.25), 0 0 0 1px rgba(180,160,110,.18) inset, 0 1px 0 rgba(255,255,255,.9) inset',
+    guilloche: 'rgba(120,95,50,0.08)',
+    cornerVignette: `
+      radial-gradient(ellipse 40% 30% at 0% 0%,   rgba(255,255,255,.6) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 30% at 100% 0%, rgba(200,180,130,.15) 0%, transparent 70%)
+    `,
+    iridBlend: 'multiply',
+    specSweep: 'linear-gradient(128deg, transparent 35%, rgba(255,255,255,.65) 50%, transparent 65%)',
+    rimHighlight: `
+      inset 0 0 0 1px rgba(180,160,110,.15),
+      inset 0 2px 0 rgba(255,255,255,.7),
+      inset 0 -1px 0 rgba(217,200,120,.2),
+      inset 0 -40px 60px -40px rgba(217,251,74,.08)
+    `,
+    wordmarkGrad: 'linear-gradient(160deg, #2a241a 0%, #463f30 100%)',
+    tagline: '#8a7d60',
+    embossDark: 'rgba(120,95,50,0.35)',
+    embossLight: 'rgba(255,255,255,0.9)',
+    embossBase: 'rgba(120,95,50,0.08)',
+    eyebrow: '#8a9c2e',
+    eyebrowShadow: '0 0 1px rgba(138,156,46,.4)',
+    bigNumGrad: 'linear-gradient(165deg, #2a241a 0%, #1a1510 30%, #3d3524 60%, #1a1510 80%, #2a241a 100%)',
+    bigNumDrop: 'drop-shadow(0 1px 0 rgba(255,255,255,.8)) drop-shadow(0 2px 3px rgba(120,95,50,.25))',
+    percentColor: '#a8bf2e',
+    percentShadow: '0 0 12px rgba(168,191,46,.4), 0 1px 0 rgba(255,255,255,.6)',
+    labelMuted: 'rgba(90,75,45,.55)',
+    numberText: '#2a241a',
+    numberEmboss: '0 1px 0 rgba(255,255,255,.7), 0 -0.3px 0 rgba(120,95,50,.2)',
+    holderText: '#1a1510',
+    holderEmboss: '0 1px 0 rgba(255,255,255,.6)',
+    validText: '#3a3020',
+    microText: 'rgba(90,75,45,.38)',
+  };
+
+  // Маскируем номер если hidden: "DLT •••• •••• 2611"
+  const maskedNumber = React.useMemo(() => {
+    if (!hidden) return number;
+    const parts = number.split(' ');
+    // Если 4 группы (DLT 4182 0907 2611) — оставляем первую и последнюю
+    if (parts.length >= 4) {
+      return `${parts[0]} •••• •••• ${parts[parts.length - 1]}`;
+    }
+    return '•••• •••• •••• ••••';
+  }, [hidden, number]);
+
+  // Boost iridescence floor so 15% тоже смотрится сочно
+  const k = Math.max(0.6, Math.min(1, pct / 0.42));
+  const iriOpacity = (0.5 + 0.6 * k).toFixed(2);
+  const glowOp = (0.55 + 0.4 * k).toFixed(2);
+
+  return (
+    <div style={{ position:'relative', width, height: h }}>
+      <div style={{
+        position:'absolute', inset: -30,
+        background: dark
+          ? `radial-gradient(ellipse at 30% 30%, rgba(77,134,255,${0.28*k+0.08}) 0%, transparent 55%),
+             radial-gradient(ellipse at 75% 80%, rgba(255,58,94,${0.28*k+0.06}) 0%, transparent 55%),
+             radial-gradient(ellipse at 55% 55%, rgba(217,251,74,${0.15*k+0.04}) 0%, transparent 55%)`
+          : `radial-gradient(ellipse at 30% 30%, rgba(217,200,120,${0.22*k+0.06}) 0%, transparent 55%),
+             radial-gradient(ellipse at 75% 80%, rgba(210,160,80,${0.18*k+0.04}) 0%, transparent 55%),
+             radial-gradient(ellipse at 55% 55%, rgba(217,251,74,${0.08*k+0.02}) 0%, transparent 55%)`,
+        filter:'blur(28px)', opacity: glowOp, pointerEvents:'none',
+      }}/>
+      <div style={{
+        position:'relative', width:'100%', height:'100%',
+        borderRadius: 26,
+        background: palette.cardBg,
+        overflow:'hidden',
+        boxShadow: palette.cardShadow,
+        color: dark ? '#ededf0' : '#2a241a',
+        fontFamily:'Manrope, system-ui, sans-serif',
+      }}>
+        {/* Guilloche — тонкие волновые линии как на банкнотах */}
+        <svg style={{
+          position:'absolute', inset: 0, width:'100%', height:'100%',
+          opacity: dark ? 0.06 : 0.12, pointerEvents:'none',
+        }} viewBox={`0 0 ${width} ${h}`} preserveAspectRatio="none">
+          <defs>
+            <linearGradient id={`guilloche-fade-${width}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"  stopColor={dark ? 'white' : '#8a7d50'} stopOpacity="0"/>
+              <stop offset="20%" stopColor={dark ? 'white' : '#8a7d50'} stopOpacity="1"/>
+              <stop offset="80%" stopColor={dark ? 'white' : '#8a7d50'} stopOpacity="1"/>
+              <stop offset="100%" stopColor={dark ? 'white' : '#8a7d50'} stopOpacity="0"/>
+            </linearGradient>
+            <mask id={`guilloche-mask-${width}`}>
+              <rect width={width} height={h} fill={`url(#guilloche-fade-${width})`}/>
+            </mask>
+          </defs>
+          <g mask={`url(#guilloche-mask-${width})`}>
+            {Array.from({ length: 38 }, (_, i) => {
+              const y = i * 14 + 10;
+              const amp = 5 + (i % 3) * 2;
+              return (
+                <path key={i}
+                  d={`M-20 ${y} Q${width*0.25} ${y - amp} ${width*0.5} ${y} T${width + 20} ${y}`}
+                  stroke={dark ? 'white' : '#8a7d50'} strokeWidth="0.35" fill="none"
+                />
+              );
+            })}
+          </g>
+        </svg>
+
+        {/* Corner vignettes для premium глубины */}
+        <div style={{
+          position:'absolute', inset: 0, pointerEvents:'none',
+          background: palette.cornerVignette,
+        }}/>
+
+        {/* Iridescent wash — smoother, менее кислотный */}
+        <div style={{
+          position:'absolute', inset: 0,
+          background:`conic-gradient(from 210deg at 35% 120%,
+            rgba(77,134,255,.45) 0deg,
+            rgba(155,77,255,.4) 60deg,
+            rgba(255,58,94,.48) 125deg,
+            rgba(255,166,80,.35) 195deg,
+            rgba(217,251,74,.42) 265deg,
+            rgba(77,200,255,.42) 325deg,
+            rgba(77,134,255,.45) 360deg)`,
+          mixBlendMode: palette.iridBlend,
+          opacity: dark ? iriOpacity : (iriOpacity * 0.35).toFixed(2),
+          filter:`saturate(${(0.8+0.8*k).toFixed(2)}) blur(0.3px)`,
+          maskImage:'radial-gradient(ellipse 110% 65% at 50% 115%, #000 0%, transparent 75%)',
+        }}/>
+
+        {/* Diagonal spec sweep (стеклянный блик) */}
+        <div style={{
+          position:'absolute', inset: 0,
+          background: palette.specSweep,
+          mixBlendMode: dark ? 'overlay' : 'soft-light',
+          opacity: .7,
+        }}/>
+
+        {/* Noise texture — тактильность поверхности */}
+        <div style={{
+          position:'absolute', inset: 0, opacity: dark ? .12 : .08, mixBlendMode:'overlay', pointerEvents:'none',
+          backgroundImage: 'url("data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22140%22 height=%22140%22><filter id=%22n%22><feTurbulence type=%22fractalNoise%22 baseFrequency=%220.85%22 numOctaves=%222%22/></filter><rect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23n)%22/></svg>")',
+        }}/>
+
+        {/* Rim highlight — верхняя кромка света + тончайший lime снизу */}
+        <div style={{
+          position:'absolute', inset: 0, borderRadius: 26, pointerEvents:'none',
+          boxShadow: palette.rimHighlight,
+        }}/>
+
+        {portrait ? (
+          <div style={{
+            position:'relative', zIndex: 2, height:'100%',
+            padding:'22px 22px 18px',
+            display:'flex', flexDirection:'column',
+          }}>
+            {/* TOP · wordmark + emboss */}
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+              <div>
+                <div style={{
+                  fontFamily:'Unbounded', fontWeight: 800, fontSize: 22,
+                  letterSpacing:'.01em', lineHeight: 1,
+                  background: palette.wordmarkGrad,
+                  WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent',
+                  backgroundClip:'text',
+                }}>
+                  ДЕЛ<span style={{ WebkitTextFillColor: palette.eyebrow, color: palette.eyebrow }}>Ь</span>ТА
+                </div>
+                <div style={{
+                  fontFamily:'Manrope', fontStyle:'italic', fontWeight: 300,
+                  fontSize: 11.5, color: palette.tagline, marginTop: 4, letterSpacing:'.01em',
+                }}>
+                  Разница — <span style={{ color: palette.eyebrow, fontStyle:'italic' }}>ваша</span>.
+                </div>
+              </div>
+              {/* Blind-emboss Δ — тиснение, видимое только через свет и тень */}
+              <div style={{ position:'relative', width: 30, height: 30 }}>
+                <svg width="30" height="30" viewBox="0 0 30 30" style={{ display:'block' }}>
+                  {/* bottom-right: тень — как если бы свет падал сверху-слева */}
+                  <path d="M15 8.5 L22.5 22 L7.5 22 Z"
+                    stroke={palette.embossDark} strokeWidth="1.1"
+                    fill="none" strokeLinejoin="round"
+                    transform="translate(0.7, 0.7)"/>
+                  {/* top-left: блик на выпуклой грани */}
+                  <path d="M15 8.5 L22.5 22 L7.5 22 Z"
+                    stroke={palette.embossLight} strokeWidth="1.1"
+                    fill="none" strokeLinejoin="round"
+                    transform="translate(-0.7, -0.7)"/>
+                  {/* тончайший центральный контур — базовая структура */}
+                  <path d="M15 8.5 L22.5 22 L7.5 22 Z"
+                    stroke={palette.embossBase} strokeWidth="0.5"
+                    fill="none" strokeLinejoin="round"/>
+                </svg>
+              </div>
+            </div>
+
+            {/* CHIP ROW · EMV chip + contactless */}
+            <div style={{ display:'flex', alignItems:'center', gap: 10, marginTop: 18 }}>
+              {/* EMV chip — золотой с линиями контактов */}
+              <svg width="42" height="32" viewBox="0 0 42 32" style={{ flexShrink: 0 }}>
+                <defs>
+                  <linearGradient id={`chip-${width}`} x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%"   stopColor="#d4b876"/>
+                    <stop offset="35%"  stopColor="#f4e4a1"/>
+                    <stop offset="60%"  stopColor="#e8cd82"/>
+                    <stop offset="100%" stopColor="#a8894a"/>
+                  </linearGradient>
+                  <linearGradient id={`chip-center-${width}`} x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%"  stopColor="#c4a55f"/>
+                    <stop offset="100%" stopColor="#9c7f3e"/>
+                  </linearGradient>
+                </defs>
+                <rect width="42" height="32" rx="5" fill={`url(#chip-${width})`}/>
+                {/* horizontal contact lines */}
+                <line x1="0"  y1="8"  x2="14" y2="8"  stroke="#7a5f28" strokeWidth="0.6"/>
+                <line x1="28" y1="8"  x2="42" y2="8"  stroke="#7a5f28" strokeWidth="0.6"/>
+                <line x1="0"  y1="16" x2="14" y2="16" stroke="#7a5f28" strokeWidth="0.6"/>
+                <line x1="28" y1="16" x2="42" y2="16" stroke="#7a5f28" strokeWidth="0.6"/>
+                <line x1="0"  y1="24" x2="14" y2="24" stroke="#7a5f28" strokeWidth="0.6"/>
+                <line x1="28" y1="24" x2="42" y2="24" stroke="#7a5f28" strokeWidth="0.6"/>
+                {/* vertical dividers */}
+                <line x1="14" y1="0"  x2="14" y2="32" stroke="#7a5f28" strokeWidth="0.6"/>
+                <line x1="28" y1="0"  x2="28" y2="32" stroke="#7a5f28" strokeWidth="0.6"/>
+                {/* inner square — "brain" */}
+                <rect x="14.5" y="10.5" width="13" height="11" fill={`url(#chip-center-${width})`} stroke="#7a5f28" strokeWidth="0.5"/>
+                {/* tiny highlight */}
+                <rect x="15" y="11" width="6" height="1" fill="rgba(255,255,255,.4)"/>
+              </svg>
+
+              {/* Contactless wave */}
+              <svg width="20" height="26" viewBox="0 0 24 32" fill="none" style={{ flexShrink: 0, opacity: 0.85 }}>
+                <path d="M5 9 Q10 16 5 23"   stroke={dark ? 'rgba(240,240,245,.9)' : 'rgba(90,75,45,.7)'} strokeWidth="1.8" strokeLinecap="round" fill="none"/>
+                <path d="M11 5 Q18 16 11 27" stroke={dark ? 'rgba(240,240,245,.7)' : 'rgba(90,75,45,.5)'} strokeWidth="1.8" strokeLinecap="round" fill="none"/>
+                <path d="M17 1 Q26 16 17 31" stroke={dark ? 'rgba(240,240,245,.5)' : 'rgba(90,75,45,.35)'} strokeWidth="1.8" strokeLinecap="round" fill="none"/>
+              </svg>
+            </div>
+
+            {/* MIDDLE · ОПЛАТА ПО ФАКТУ + 15% с metallic */}
+            <div style={{ marginTop: 16 }}>
+              <div style={{
+                fontFamily:'JetBrains Mono', fontSize: 8.5, letterSpacing:'.18em',
+                color: palette.eyebrow, fontWeight: 600,
+                textShadow: palette.eyebrowShadow,
+                whiteSpace:'nowrap',
+              }}>ОПЛАТА ПО ФАКТУ ПОЛУЧЕНИЯ</div>
+              <div style={{
+                fontFamily:'Unbounded', fontWeight: 900,
+                fontSize: 84, lineHeight: .9, letterSpacing:'-.045em',
+                marginTop: 2,
+                display:'flex', alignItems:'baseline',
+              }}>
+                <span style={{
+                  background: palette.bigNumGrad,
+                  WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent',
+                  backgroundClip:'text',
+                  filter: palette.bigNumDrop,
+                }}>{(pct*100).toFixed(0)}</span>
+                <span style={{
+                  color: palette.percentColor,
+                  textShadow: palette.percentShadow,
+                  marginLeft: 4,
+                }}>%</span>
+              </div>
+            </div>
+
+            {/* Spacer */}
+            <div style={{ flex: 1, minHeight: 10 }}/>
+
+            {/* BOTTOM · Номер + держатель/действ + micro-text */}
+            <div>
+              <div style={{
+                fontFamily:'JetBrains Mono', fontSize: 8, letterSpacing:'.28em',
+                color: palette.labelMuted, textTransform:'uppercase', fontWeight: 500,
+              }}>Номер карты</div>
+              <div style={{
+                fontFamily:'JetBrains Mono', fontSize: 16.5, fontWeight: 500,
+                letterSpacing:'.16em', color: palette.numberText, marginTop: 4, whiteSpace:'nowrap',
+                textShadow: palette.numberEmboss,
+                transition: 'letter-spacing .25s ease',
+              }}>
+                {maskedNumber}
+              </div>
+
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end', marginTop: 12 }}>
+                <div>
+                  <div style={{
+                    fontFamily:'JetBrains Mono', fontSize: 8, letterSpacing:'.28em',
+                    color: palette.labelMuted, textTransform:'uppercase', fontWeight: 500,
+                  }}>Держатель</div>
+                  <div style={{
+                    fontFamily:'Unbounded', fontWeight: 600, fontSize: 13.5,
+                    letterSpacing:'.04em', color: palette.holderText, marginTop: 4,
+                    textShadow: palette.holderEmboss,
+                  }}>{holder}</div>
+                </div>
+                <div style={{ textAlign:'right' }}>
+                  <div style={{
+                    fontFamily:'JetBrains Mono', fontSize: 8, letterSpacing:'.28em',
+                    color: palette.labelMuted, textTransform:'uppercase', fontWeight: 500,
+                  }}>Действ. до</div>
+                  <div style={{
+                    fontFamily:'JetBrains Mono', fontSize: 13, fontWeight: 500,
+                    letterSpacing:'.14em', color: palette.validText, marginTop: 4,
+                    textShadow: palette.holderEmboss,
+                  }}>{valid}</div>
+                </div>
+              </div>
+
+              {/* Micro-text — серийник как на Amex/Centurion */}
+              <div style={{
+                display:'flex', justifyContent:'space-between', alignItems:'center',
+                fontFamily:'JetBrains Mono', fontSize: 6, letterSpacing:'.2em',
+                color: palette.microText, marginTop: 10, textTransform:'uppercase',
+              }}>
+                <span>DELTA · PLATFORM · ISSUED 2025</span>
+                <span style={{
+                  display:'inline-flex', alignItems:'center', gap: 3,
+                }}>
+                  <svg width="6" height="6" viewBox="0 0 10 10"><path d="M5 1 L9 9 L1 9 Z" fill={dark ? 'rgba(217,251,74,.4)' : 'rgba(138,156,46,.5)'}/></svg>
+                  TM REG
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+};
+
+// ══════════════════════════════════════════════════════════════
+//                      Data — пустой стейт для нового пользователя
+//  TODO: заменится на данные с сервера через GET /api/user/me
+// ══════════════════════════════════════════════════════════════
+const ORDERS = [];
+
+// Гипермаркеты-источники — откуда мы закупаем клиенту корзину
+const RETAILERS = [
+  { id:'leroy',    name:'Леруа Мерлен',    domain:'leroymerlin.ru' },
+  { id:'petro',    name:'Петрович',        domain:'petrovich.ru' },
+  { id:'vseinst',  name:'ВсеИнструменты',  domain:'vseinstrumenti.ru' },
+  { id:'castor',   name:'Castorama',       domain:'castorama.ru' },
+  { id:'other',    name:'Другой магазин',  domain:'' },
+];
+
+// Города обслуживания
+const CITIES = [
+  { id:'msk',  name:'Москва' },
+  { id:'mo',   name:'МО' },
+  { id:'spb',  name:'СПб' },
+  { id:'lo',   name:'ЛО' },
+];
+
+// Филиалы для самовывоза (по городу)
+const PICKUP_STORES = {
+  msk: ['Леруа · Петровское',  'Петрович · Алтуфьево',  'ВсеИнструменты · Мосрентген',  'Castorama · Юг'],
+  mo:  ['Леруа · Котельники',  'Петрович · Балашиха',    'Петрович · Химки',             'ВсеИнструменты · Одинцово'],
+  spb: ['Леруа · Парнас',      'Петрович · Мурино',      'Максидом · Дыбенко'],
+  lo:  ['Леруа · Гатчина',     'Петрович · Кудрово'],
+};
+
+const rubM = v => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(v) + ' ₽';
+
+// ══════════════════════════════════════════════════════════════
+//                      QR placeholder
+// ══════════════════════════════════════════════════════════════
+const QRPlaceholder = ({ dark }) => {
+  const N = 21;
+  const cells = useMemo(() => {
+    const arr = [];
+    let seed = 42;
+    const rnd = () => { seed = (seed*9301+49297) % 233280; return seed/233280; };
+    for (let y=0;y<N;y++) for (let x=0;x<N;x++) arr.push({x,y, on: rnd() > 0.52});
+    const finder = (cx,cy) => {
+      for (let y=cy;y<cy+7;y++) for (let x=cx;x<cx+7;x++){
+        const inRing = x===cx||x===cx+6||y===cy||y===cy+6;
+        const inInner = x>=cx+2&&x<=cx+4&&y>=cy+2&&y<=cy+4;
+        const i = y*N+x; if (i<arr.length) arr[i].on = inRing || inInner;
+      }
+    };
+    finder(0,0); finder(N-7,0); finder(0,N-7);
+    return arr;
+  }, []);
+  return (
+    <div style={{ padding: 18, borderRadius: 16, background:'#fff', width: 220, margin: '0 auto', boxShadow: '0 8px 24px -8px rgba(0,0,0,.35)' }}>
+      <svg viewBox={`0 0 ${N} ${N}`} width="100%" style={{ display:'block' }} shapeRendering="crispEdges">
+        {cells.filter(c => c.on).map((c, i) => (
+          <rect key={i} x={c.x} y={c.y} width="1" height="1" fill="#0a0a0c"/>
+        ))}
+      </svg>
+      <div style={{ textAlign:'center', marginTop: 10, fontFamily:'JetBrains Mono', fontSize:10, letterSpacing:'.2em', color:'#0a0a0c', fontWeight:700 }}>
+        DLT · 4182 · 0907 · 2611
+      </div>
+    </div>
+  );
+};
+
+// ══════════════════════════════════════════════════════════════
+//                      Onboarding (3 slides)
+// ══════════════════════════════════════════════════════════════
+const Onboarding = ({ onDone, dark }) => {
+  const [step, setStep] = useState(0);
+  const ink = dark ? '#f0f0f3' : '#16161a';
+  const dim = dark ? 'rgba(255,255,255,.55)' : 'rgba(0,0,0,.55)';
+
+  const slides = [
+    {
+      title: <>ДЕЛ<span style={{color:'#d9fb4a'}}>Ь</span>ТА</>,
+      sub: 'Разница — ваша.',
+      body: 'Закупаем вам в Леруа, Петровиче и других гипермаркетах. Платите на 15% меньше — с любой корзины.',
+      art: () => (
+        <div style={{ display:'grid', placeItems:'center', height: 320, marginTop: -10 }}>
+          <MobileCard pct={0.15} width={220} dark={dark}/>
+        </div>
+      ),
+    },
+    {
+      title: 'Пришлите корзину',
+      sub: 'из любого гипермаркета',
+      body: 'Ссылку из Леруа, Петровича или список артикулов. Мы посчитаем, оформим, привезём или отдадим в пункте самовывоза.',
+      art: () => (
+        <div style={{ display:'grid', placeItems:'center', height: 240 }}>
+          <div style={{
+            width: 240, height: 180, borderRadius: 20,
+            background:'linear-gradient(180deg, rgba(217,251,74,.12), rgba(217,251,74,.02))',
+            border:'1px solid rgba(217,251,74,.3)', padding: 20,
+            display:'flex', flexDirection:'column', justifyContent:'space-between',
+          }}>
+            <div style={{ fontFamily:'JetBrains Mono', fontSize: 10, letterSpacing:'.2em', color:'#d9fb4a' }}>С КОРЗИНЫ 100 000 ₽</div>
+            <div>
+              <div style={{ fontFamily:'Unbounded', fontWeight: 900, fontSize: 42, color: ink, letterSpacing:'-.02em' }}>−15 000 <span style={{ color: dim, fontSize: 24 }}>₽</span></div>
+              <div style={{ fontFamily:'Manrope', fontSize: 12, color: dim, fontStyle:'italic' }}>ваша скидка — 15%</div>
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: 'Приводите своих',
+      sub: 'получайте % с их заказов',
+      body: 'Реферальная программа для партнёров. Бесконечный уровень вложенности.',
+      art: () => (
+        <div style={{ display:'grid', placeItems:'center', height: 240 }}>
+          <svg width="240" height="180" viewBox="0 0 240 180" fill="none">
+            <circle cx="120" cy="40" r="20" stroke="#d9fb4a" strokeWidth="2"/>
+            <text x="120" y="45" textAnchor="middle" fontFamily="Unbounded" fontWeight="800" fontSize="14" fill="#d9fb4a">ВЫ</text>
+            <line x1="120" y1="62" x2="60"  y2="110" stroke={dim} strokeDasharray="3 3"/>
+            <line x1="120" y1="62" x2="180" y2="110" stroke={dim} strokeDasharray="3 3"/>
+            <circle cx="60"  cy="128" r="16" stroke={ink} strokeWidth="1.5"/>
+            <circle cx="180" cy="128" r="16" stroke={ink} strokeWidth="1.5"/>
+            <line x1="60"  y1="146" x2="30"  y2="170" stroke={dim} strokeDasharray="2 2"/>
+            <line x1="60"  y1="146" x2="90"  y2="170" stroke={dim} strokeDasharray="2 2"/>
+            <line x1="180" y1="146" x2="150" y2="170" stroke={dim} strokeDasharray="2 2"/>
+            <circle cx="30"  cy="170" r="8" fill={dim}/>
+            <circle cx="90"  cy="170" r="8" fill={dim}/>
+            <circle cx="150" cy="170" r="8" fill={dim}/>
+          </svg>
+        </div>
+      ),
+    },
+  ];
+
+  const s = slides[step];
+  const isLast = step === slides.length - 1;
+
+  return (
+    <div style={{
+      position:'absolute', inset: 0, background: dark ? '#050507' : '#fff',
+      color: ink, padding:'64px 28px 50px',
+      display:'flex', flexDirection:'column',
+    }}>
+      <div style={{ display:'flex', gap: 6, marginBottom: 24, marginTop: 8 }}>
+        {slides.map((_, i) => (
+          <div key={i} style={{
+            flex: 1, height: 3, borderRadius: 2,
+            background: i <= step ? '#d9fb4a' : (dark ? 'rgba(255,255,255,.15)' : 'rgba(0,0,0,.1)'),
+            transition:'background .3s',
+          }}/>
+        ))}
+      </div>
+      <div style={{ flex: 1, display:'flex', flexDirection:'column' }}>
+        {s.art()}
+        <div style={{ marginTop: 24 }}>
+          <div style={{ fontFamily:'Unbounded', fontWeight: 800, fontSize: 32, lineHeight: .98, letterSpacing:'-.02em' }}>{s.title}</div>
+          <div style={{ fontFamily:'Manrope', fontStyle:'italic', fontWeight: 300, fontSize: 18, color: dim, marginTop: 6 }}>{s.sub}</div>
+          <div style={{ fontFamily:'Manrope', fontSize: 15, color: dark ? 'rgba(255,255,255,.75)' : 'rgba(0,0,0,.7)', marginTop: 16, lineHeight: 1.45 }}>{s.body}</div>
+        </div>
+      </div>
+      <div style={{ display:'flex', gap: 10, marginTop: 20 }}>
+        {step > 0 && (
+          <button onClick={() => setStep(step-1)} style={{
+            flex: 1, padding:'14px', borderRadius: 14, cursor:'pointer',
+            background: dark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.05)',
+            border:`1px solid ${dark ? 'rgba(255,255,255,.1)' : 'rgba(0,0,0,.08)'}`,
+            color: ink, fontFamily:'Manrope', fontWeight: 600, fontSize: 14,
+          }}>Назад</button>
+        )}
+        <button onClick={() => isLast ? onDone() : setStep(step+1)} style={{
+          flex: 2, padding:'14px', borderRadius: 14, cursor:'pointer',
+          background:'#d9fb4a', border:'none',
+          color:'#0a0a0c', fontFamily:'Manrope', fontWeight: 700, fontSize: 14,
+        }}>{isLast ? 'Начать' : 'Дальше'}</button>
+      </div>
+    </div>
+  );
+};
+
+// ══════════════════════════════════════════════════════════════
+//                      Card screen — БЕЗ «Последних заказов»
+// ══════════════════════════════════════════════════════════════
+const CardScreen = ({ pct, dark }) => {
+  const ink = dark ? '#f0f0f3' : '#16161a';
+  const dim = dark ? 'rgba(255,255,255,.55)' : 'rgba(0,0,0,.55)';
+  const surface = dark ? '#0e0e11' : '#ffffff';
+  const { showToast, showSheet } = useUI();
+  const [hidden, setHidden] = useState(false);
+
+  const actions = [
+    { label: 'Wallet',
+      icon: <path d="M3 7l9-4 9 4v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>,
+      onClick: () => showSheet({
+        eyebrow:'APPLE WALLET',
+        title:'Добавить Δ карту в Wallet?',
+        body:'Карта появится в Wallet. Оплачивайте оптом прямо с iPhone.',
+        actions: [
+          { label:'Добавить', kind:'primary', onClick: () => showToast('Карта добавлена в Wallet', 'ok') },
+          { label:'Отмена' },
+        ],
+      })
+    },
+    { label: 'QR',
+      icon: <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM18 18h3v3h-3z"/></>,
+      onClick: () => showSheet({
+        eyebrow:'QR · DLT 4182 0907 2611',
+        title:'Покажите кассиру',
+        custom: <QRPlaceholder dark={dark}/>,
+        actions: [{ label:'Готово', kind:'primary' }],
+      })
+    },
+    { label: 'Шаринг',
+      icon: <><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8 11l8-4M8 13l8 4"/></>,
+      onClick: () => showSheet({
+        title:'Поделиться картой',
+        body:'Отправьте сотруднику. Он сможет использовать карту с вашего согласия.',
+        actions: [
+          { label:'Telegram',  onClick: () => showToast('Открываю Telegram…', 'ok') },
+          { label:'WhatsApp',  onClick: () => showToast('Открываю WhatsApp…', 'ok') },
+          { label:'SMS',       onClick: () => showToast('Открываю SMS…', 'ok') },
+          { label:'Отмена' },
+        ],
+      })
+    },
+    { label: hidden ? 'Показать' : 'Скрыть',
+      icon: hidden
+        ? <><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></>
+        : <><path d="M3 3l18 18M10.58 10.58a3 3 0 004.24 4.24M9.88 4.24A10.94 10.94 0 0112 4c6.5 0 10 7 10 7a17.6 17.6 0 01-3.22 4.03M6.11 6.11A17.6 17.6 0 002 12s3.5 7 10 7c1.1 0 2.15-.17 3.13-.48"/></>,
+      onClick: () => {
+        setHidden(h => !h);
+        showToast(hidden ? 'Номер карты показан' : 'Номер карты скрыт', 'ok');
+      }
+    },
+  ];
+
+  return (
+    <div style={{ padding:'56px 16px 30px', color: ink }}>
+      <div style={{ fontFamily:'JetBrains Mono', fontSize: 10, letterSpacing:'.25em', color: dim, textTransform:'uppercase', marginBottom: 10, marginLeft: 4 }}>Моя карта</div>
+      <div style={{ display:'grid', placeItems:'center', marginBottom: 14, paddingTop: 4, paddingBottom: 4 }}>
+        <MobileCard pct={pct} width={320} hidden={hidden} dark={dark} holder={(window.__delta && window.__delta.cardHolder) || 'ДЕРЖАТЕЛЬ КАРТЫ'}/>
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap: 10, marginBottom: 14 }}>
+        <div style={{
+          padding: 16, borderRadius: 18, background: surface,
+          border:`1px solid ${dark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.06)'}`,
+        }}>
+          <div style={{ fontFamily:'Manrope', fontSize: 11, color: dim, fontWeight: 500 }}>ВАША СКИДКА</div>
+          <div style={{ fontFamily:'Unbounded', fontWeight: 900, fontSize: 30, color: dark ? '#d9fb4a' : '#6b8400', letterSpacing:'-.02em', marginTop: 4 }}>15%</div>
+        </div>
+        <div style={{
+          padding: 16, borderRadius: 18, background: surface,
+          border:`1px solid ${dark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.06)'}`,
+        }}>
+          <div style={{ fontFamily:'Manrope', fontSize: 11, color: dim, fontWeight: 500 }}>СЭКОНОМЛЕНО ВСЕГО</div>
+          <div style={{ fontFamily:'Unbounded', fontWeight: 800, fontSize: 22, color: ink, letterSpacing:'-.02em', marginTop: 6 }}>{ORDERS.length > 0 ? rubM(ORDERS.reduce((a,o) => a + o.save, 0)) : '0 ₽'}</div>
+        </div>
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap: 8 }}>
+        {actions.map((a, i) => (
+          <button key={i} onClick={a.onClick} style={{
+            aspectRatio: 1, borderRadius: 14,
+            background: surface,
+            border:`1px solid ${dark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.06)'}`,
+            display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap: 4,
+            cursor:'pointer', color: ink,
+          }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={ink} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{a.icon}</svg>
+            <div style={{ fontFamily:'Manrope', fontSize: 10.5, fontWeight: 500 }}>{a.label}</div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ══════════════════════════════════════════════════════════════
+//                      Form primitives — вынесены наружу
+//   чтобы не пересоздаваться при каждом re-render CalcScreen
+// ══════════════════════════════════════════════════════════════
+const FormLabel = React.memo(({ dark, children }) => {
+  const dim = dark ? 'rgba(255,255,255,.55)' : 'rgba(0,0,0,.55)';
+  return (
+    <div style={{ fontFamily:'JetBrains Mono', fontSize: 9.5, letterSpacing:'.2em', color: dim, fontWeight: 500, textTransform:'uppercase', marginBottom: 4 }}>{children}</div>
+  );
+});
+
+const FormInput = React.memo(({ dark, value, onChange, placeholder, type = 'text', inputMode }) => {
+  const ink = dark ? '#f0f0f3' : '#16161a';
+  return (
+    <input
+      type={type}
+      inputMode={inputMode}
+      value={value || ''}
+      onChange={e => onChange(e.target.value)}
+      placeholder={placeholder}
+      style={{
+        width:'100%', border:'none', outline:'none', background:'transparent',
+        fontFamily:'Manrope', fontSize: 15, fontWeight: 500, color: ink, padding: 0,
+      }}
+    />
+  );
+});
+
+const FormField = React.memo(({ dark, children }) => {
+  const surface2 = dark ? '#16161a' : '#f5f6f9';
+  const bord = dark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)';
+  return (
+    <div style={{
+      padding:'10px 14px', borderRadius: 14,
+      background: surface2, border:`1px solid ${bord}`,
+      marginBottom: 8,
+    }}>{children}</div>
+  );
+});
+
+const FormChip = React.memo(({ dark, on, onClick, children, small }) => {
+  const ink = dark ? '#f0f0f3' : '#16161a';
+  const surface2 = dark ? '#16161a' : '#f5f6f9';
+  const bord = dark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)';
+  return (
+    <button onClick={onClick} style={{
+      padding: small ? '7px 12px' : '10px 14px', borderRadius: 999, cursor:'pointer',
+      background: on ? '#d9fb4a' : surface2,
+      border: on ? 'none' : `1px solid ${bord}`,
+      color: on ? '#0a0a0c' : ink,
+      fontFamily:'Manrope', fontSize: small ? 11 : 13, fontWeight: on ? 700 : 500,
+      letterSpacing:'.01em',
+      transition: 'background .15s, color .15s',
+    }}>{children}</button>
+  );
+});
+
+const StepCard = React.memo(({ dark, num, title, sub, state, summary, onNext, onEdit, canNext, isLast, children }) => {
+  const ink = dark ? '#f0f0f3' : '#16161a';
+  const dim = dark ? 'rgba(255,255,255,.55)' : 'rgba(0,0,0,.55)';
+  const dimmer = dark ? 'rgba(255,255,255,.35)' : 'rgba(0,0,0,.35)';
+  const surface = dark ? '#0e0e11' : '#ffffff';
+  const bord = dark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)';
+
+  if (state === 'done') {
+    return (
+      <button onClick={onEdit} style={{
+        width:'100%', textAlign:'left', cursor:'pointer', padding:'12px 14px',
+        borderRadius: 14, background: surface, border:`1px solid ${bord}`,
+        display:'flex', alignItems:'center', gap: 12, marginBottom: 10,
+        transition: 'all .2s',
+      }}>
+        <div style={{
+          width: 24, height: 24, borderRadius: 999, flexShrink: 0,
+          background:'#d9fb4a', display:'grid', placeItems:'center',
+          boxShadow:'0 0 0 3px rgba(217,251,74,.12)',
+        }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0a0a0c" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 6L9 17l-5-5"/>
+          </svg>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily:'JetBrains Mono', fontSize: 9, letterSpacing:'.2em', color: dim, fontWeight: 600, textTransform:'uppercase' }}>
+            {num} · {title}
+          </div>
+          <div style={{ fontFamily:'Manrope', fontSize: 13, color: ink, fontWeight: 500, marginTop: 3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+            {summary}
+          </div>
+        </div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={dimmer} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+          <path d="M12 20h9"/>
+          <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+        </svg>
+      </button>
+    );
+  }
+
+  if (state === 'future') {
+    return (
+      <div style={{
+        padding:'14px 14px', borderRadius: 14,
+        background:'transparent', border:`1px dashed ${bord}`,
+        display:'flex', alignItems:'center', gap: 12, marginBottom: 10,
+        opacity: 0.38,
+      }}>
+        <div style={{
+          width: 24, height: 24, borderRadius: 999, flexShrink: 0,
+          border: `1.5px solid ${dim}`, display:'grid', placeItems:'center',
+          fontFamily:'JetBrains Mono', fontSize: 9.5, fontWeight: 700, color: dim,
+        }}>{num}</div>
+        <div style={{ fontFamily:'Manrope', fontSize: 13.5, color: ink, fontWeight: 600 }}>
+          {title}
+        </div>
+      </div>
+    );
+  }
+
+  // ─── active ────────
+  return (
+    <div style={{
+      padding:'18px 18px 16px', borderRadius: 18,
+      background: surface, border:'1px solid rgba(217,251,74,.28)',
+      boxShadow:'0 0 0 4px rgba(217,251,74,.06), 0 20px 50px -20px rgba(0,0,0,.5)',
+      marginBottom: 10, animation:'deltaStepIn .3s cubic-bezier(.2,.8,.2,1)',
+    }}>
+      <div style={{ display:'flex', alignItems:'flex-start', gap: 12, marginBottom: 16 }}>
+        <div style={{
+          width: 28, height: 28, borderRadius: 999, flexShrink: 0,
+          background:'#d9fb4a', display:'grid', placeItems:'center',
+          fontFamily:'JetBrains Mono', fontSize: 10.5, fontWeight: 800, color:'#0a0a0c',
+          letterSpacing:'.02em',
+          boxShadow:'0 0 0 4px rgba(217,251,74,.18), 0 6px 18px -4px rgba(217,251,74,.5)',
+        }}>{num}</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily:'Unbounded', fontWeight: 700, fontSize: 17, color: ink, letterSpacing:'-.01em', lineHeight: 1.15 }}>
+            {title}
+          </div>
+          {sub && (
+            <div style={{ fontFamily:'Manrope', fontStyle:'italic', fontWeight: 300, fontSize: 12.5, color: dim, marginTop: 3 }}>
+              {sub}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div>{children}</div>
+
+      <button
+        disabled={!canNext}
+        onClick={onNext}
+        style={{
+          width:'100%', marginTop: 16, padding:'14px', borderRadius: 12,
+          background: canNext ? '#d9fb4a' : (dark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.05)'),
+          border:'none', cursor: canNext ? 'pointer' : 'not-allowed',
+          color: canNext ? '#0a0a0c' : dim,
+          fontFamily:'Manrope', fontWeight: 700, fontSize: 14,
+          boxShadow: canNext ? '0 6px 18px -4px rgba(217,251,74,.45)' : 'none',
+          display:'flex', alignItems:'center', justifyContent:'center', gap: 6,
+          letterSpacing:'.01em',
+          transition:'all .15s',
+        }}
+      >
+        {isLast ? 'Отправить заявку менеджеру' : 'Далее'}
+        {!isLast && (
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={canNext ? '#0a0a0c' : dim} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 12h14M13 6l6 6-6 6"/>
+          </svg>
+        )}
+      </button>
+    </div>
+  );
+});
+
+// ══════════════════════════════════════════════════════════════
+//                      Request screen — реальный процесс заявки
+// ══════════════════════════════════════════════════════════════
+const CalcScreen = ({ dark, state, setState, onShowCard }) => {
+  const ink = dark ? '#f0f0f3' : '#16161a';
+  const dim = dark ? 'rgba(255,255,255,.55)' : 'rgba(0,0,0,.55)';
+  const dimmer = dark ? 'rgba(255,255,255,.35)' : 'rgba(0,0,0,.35)';
+  const surface = dark ? '#0e0e11' : '#ffffff';
+  const surface2 = dark ? '#16161a' : '#f5f6f9';
+  const bord = dark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)';
+  const { showSheet, showToast } = useUI();
+
+  const s = state;
+  // Используем функциональный setState чтобы избежать stale closure
+  // и обернём в useCallback для стабильной ссылки
+  const set = React.useCallback((patch) => {
+    setState(prev => ({ ...prev, ...patch }));
+  }, [setState]);
+
+  const [step, setStep] = React.useState(1);
+  const [done, setDone] = React.useState({ 1: false, 2: false, 3: false });
+
+  const pct = 0.15;
+  const amt = Number(s.amount) || 0;
+  const discount = Math.round(amt * pct);
+  const toPay = amt - discount;
+
+  const cityObj = CITIES.find(c => c.id === s.cityId) || CITIES[0];
+  const pickupList = PICKUP_STORES[s.cityId] || [];
+
+  // ─── Validation ─────────────────────────────────────────────
+  const step1Valid = (s.cart || '').trim().length >= 5;
+  const step2Valid = true; // сумма опциональна
+  const step3Valid = s.mode === 'delivery'
+    ? !!(s.address && s.address.length >= 4)
+    : !!s.pickupStore;
+  const step4Valid = (s.phone || '').replace(/\D/g,'').length >= 10;
+
+  const currentValid = step === 1 ? step1Valid
+    : step === 2 ? step2Valid
+    : step === 3 ? step3Valid
+    : step4Valid;
+
+  const haptic = () => {
+    try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light'); } catch(e) {}
+  };
+
+  const next = React.useCallback(() => {
+    if (!currentValid) return;
+    haptic();
+    if (step < 4) {
+      setDone(d => ({ ...d, [step]: true }));
+      setStep(step + 1);
+    } else {
+      submit();
+    }
+    // eslint-disable-next-line
+  }, [currentValid, step]);
+
+  const editStep = React.useCallback((n) => {
+    haptic();
+    setStep(n);
+  }, []);
+
+  const submit = () => {
+    const id = 'DLT-48' + Math.floor(10 + Math.random()*89);
+    const tg = window.Telegram?.WebApp;
+    try { tg?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+
+    // ─── Delta · Payload для бота ─────────────────────────────
+    const payload = {
+      client_id: id,
+      cart: s.cart,
+      amount: s.amount,
+      mode: s.mode,
+      cityId: s.cityId,
+      cityName: cityObj.name,
+      address: s.address,
+      floor: s.floor,
+      lift: s.lift,
+      destination: s.destination,
+      pickupStore: s.pickupStore,
+      comment: s.comment,
+      phone: s.phone,
+      ref: (window.__delta && window.__delta.startParam) || null,
+      user: (window.__delta && window.__delta.tgUser) || null,
+    };
+
+    // В TMA — отправляем данные боту через sendData()
+    // Telegram сам закроет мини-апп и доставит payload в handle_web_app_data
+    const inTMA = !!(window.__delta && window.__delta.isTMA);
+    if (inTMA && tg?.sendData) {
+      try { tg.sendData(JSON.stringify(payload)); return; } catch(e) { /* fallback ниже */ }
+    }
+
+    // В браузере (демо) — показываем sheet как раньше
+    showSheet({
+      eyebrow: `ЗАЯВКА · ${id}`,
+      title: 'Заявка отправлена менеджеру',
+      body: s.mode === 'delivery'
+        ? `Менеджер свяжется в течение 15 минут — рассчитает стоимость доставки в ${cityObj.name} и подтвердит наличие.`
+        : `Менеджер свяжется в течение 15 минут — подтвердит наличие и время готовности в «${s.pickupStore}».`,
+      actions: [
+        { label: 'Хорошо', kind: 'primary', onClick: () => { showToast('Статус заявки появится на главной', 'ok'); onShowCard(); } },
+      ],
+    });
+  };
+
+  // ─── Stable field setters (useCallback с функциональным setState) ──
+  const setCart        = React.useCallback(v => set({ cart: v }),        [set]);
+  const setAmount      = React.useCallback(v => set({ amount: +v || 0 }), [set]);
+  const setAmountRange = React.useCallback(e => set({ amount: +e.target.value }), [set]);
+  const setAddress     = React.useCallback(v => set({ address: v }),     [set]);
+  const setFloor       = React.useCallback(v => set({ floor: v }),       [set]);
+  const setComment     = React.useCallback(v => set({ comment: v }),     [set]);
+  const setPhone       = React.useCallback(v => set({ phone: v }),       [set]);
+
+  // ─── Summaries ──────────────────────────────────────────────
+  const truncate = (str, n) => str.length > n ? str.slice(0, n) + '…' : str;
+  const summary1 = truncate((s.cart || '').trim().split('\n')[0] || '—', 40);
+  const summary2 = amt > 0
+    ? `${rubM(amt)} → скидка ${rubM(discount)}`
+    : 'Пропустили';
+  const summary3 = s.mode === 'delivery'
+    ? `Доставка · ${cityObj.name}${s.address ? ', ' + truncate(s.address, 22) : ''}`
+    : `Самовывоз · ${s.pickupStore || cityObj.name}`;
+
+  const stepState = (n) => {
+    if (done[n]) return 'done';
+    if (step === n) return 'active';
+    return 'future';
+  };
+
+  return (
+    <div style={{ padding:'56px 16px 40px', color: ink }}>
+      <div style={{ fontFamily:'Unbounded', fontWeight: 800, fontSize: 26, letterSpacing:'-.01em' }}>Новая заявка</div>
+      <div style={{ fontFamily:'Manrope', fontStyle:'italic', fontWeight: 300, fontSize: 13, color: dim, marginTop: 4, marginBottom: 18 }}>
+        Пришлите корзину из любого гипермаркета — закупим на 15% дешевле
+      </div>
+
+      {/* Progress bar */}
+      <div style={{ display:'flex', gap: 4, marginBottom: 8 }}>
+        {[1,2,3,4].map(i => (
+          <div key={i} style={{
+            flex: 1, height: 3, borderRadius: 2,
+            background: (done[i] || i < step) ? '#d9fb4a'
+              : i === step ? 'rgba(217,251,74,.4)'
+              : (dark ? 'rgba(255,255,255,.1)' : 'rgba(0,0,0,.08)'),
+            transition:'background .3s',
+          }}/>
+        ))}
+      </div>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom: 16 }}>
+        <div style={{ fontFamily:'JetBrains Mono', fontSize: 10, letterSpacing:'.22em', color: dim, fontWeight: 500 }}>
+          ШАГ {step} ИЗ 4
+        </div>
+        <div style={{ fontFamily:'JetBrains Mono', fontSize: 10, letterSpacing:'.12em', color: dimmer }}>
+          {Math.round(((step - 1) / 3) * 100)}%
+        </div>
+      </div>
+
+      {/* ───── Step 1: Корзина ───── */}
+      <StepCard
+        dark={dark}
+        num="01" title="Корзина или артикулы" sub="Ссылка на корзину или список артикулов"
+        state={stepState(1)} summary={summary1}
+        onNext={next} onEdit={() => editStep(1)} canNext={step1Valid} isLast={false}
+      >
+        <div style={{ padding:'12px 14px', borderRadius: 14, background: surface2, border:`1px solid ${bord}` }}>
+          <textarea
+            value={s.cart || ''}
+            onChange={e => setCart(e.target.value)}
+            placeholder={'leroymerlin.ru/basket/12345678\n\nили список артикулов:\n17923456 × 40 шт\n82374912 × 15 шт'}
+            rows={5}
+            style={{
+              width:'100%', border:'none', outline:'none', background:'transparent',
+              fontFamily:'Manrope', fontSize: 14, fontWeight: 400, color: ink,
+              resize:'none', lineHeight: 1.45, padding: 0,
+            }}
+          />
+        </div>
+      </StepCard>
+
+      {/* ───── Step 2: Сумма ───── */}
+      <StepCard
+        dark={dark}
+        num="02" title="Сумма корзины" sub="Необязательно — поможет сразу увидеть скидку"
+        state={stepState(2)} summary={summary2}
+        onNext={next} onEdit={() => editStep(2)} canNext={step2Valid} isLast={false}
+      >
+        <div style={{ padding:'14px 16px', borderRadius: 14, background: surface2, border:`1px solid ${bord}`, marginBottom: 10 }}>
+          <FormLabel dark={dark}>Розничная сумма, ₽</FormLabel>
+          <div style={{ display:'flex', alignItems:'baseline', gap: 4 }}>
+            <input
+              type="number"
+              inputMode="numeric"
+              value={s.amount || ''}
+              onChange={e => setAmount(e.target.value)}
+              placeholder="0"
+              style={{
+                flex: 1, border:'none', outline:'none', background:'transparent',
+                fontFamily:'Unbounded', fontWeight: 800, fontSize: 30, color: ink,
+                letterSpacing:'-.02em', padding: 0, minWidth: 0,
+              }}
+            />
+            <span style={{ fontFamily:'Unbounded', fontWeight: 500, fontSize: 20, color: dim }}>₽</span>
+          </div>
+          <input type="range" min="1000" max="1000000" step="1000" value={amt || 1000}
+            onChange={setAmountRange}
+            style={{ width:'100%', marginTop: 10, accentColor:'#d9fb4a' }}
+          />
+          <div style={{ display:'flex', justifyContent:'space-between', fontFamily:'JetBrains Mono', fontSize: 10, color: dim, marginTop: 2, letterSpacing:'.05em' }}>
+            <span>1К</span><span>100К</span><span>500К</span><span>1М ₽</span>
+          </div>
+        </div>
+
+        {amt > 0 && (
+          <div style={{
+            padding:'14px 16px', borderRadius: 14,
+            background:'linear-gradient(180deg, rgba(217,251,74,.1) 0%, rgba(217,251,74,.02) 100%)',
+            border:'1px solid rgba(217,251,74,.3)',
+          }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom: 6 }}>
+              <span style={{ fontFamily:'Manrope', fontSize: 12, color: dim }}>В магазине</span>
+              <span style={{ fontFamily:'Unbounded', fontWeight: 600, fontSize: 14, color: dim, textDecoration:'line-through' }}>{rubM(amt)}</span>
+            </div>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom: 10 }}>
+              <span style={{ fontFamily:'Manrope', fontSize: 12, color:'#d9fb4a', fontWeight: 600 }}>Ваша скидка 15%</span>
+              <span style={{ fontFamily:'Unbounded', fontWeight: 700, fontSize: 14, color:'#d9fb4a' }}>−{rubM(discount)}</span>
+            </div>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', paddingTop: 10, borderTop:`1px dashed ${bord}` }}>
+              <span style={{ fontFamily:'Manrope', fontSize: 13, color: ink, fontWeight: 600 }}>К оплате</span>
+              <span style={{ fontFamily:'Unbounded', fontWeight: 800, fontSize: 22, color: ink, letterSpacing:'-.02em' }}>{rubM(toPay)}</span>
+            </div>
+          </div>
+        )}
+      </StepCard>
+
+      {/* ───── Step 3: Получение ───── */}
+      <StepCard
+        dark={dark}
+        num="03" title="Как получить" sub="Доставим или отдадим в пункте самовывоза"
+        state={stepState(3)} summary={summary3}
+        onNext={next} onEdit={() => editStep(3)} canNext={step3Valid} isLast={false}
+      >
+        <div style={{ display:'flex', gap: 4, padding: 4, borderRadius: 14, background: surface2, border:`1px solid ${bord}`, marginBottom: 12 }}>
+          {[
+            { id:'delivery', label:'Доставка' },
+            { id:'pickup',   label:'Самовывоз' },
+          ].map(m => {
+            const on = s.mode === m.id;
+            return (
+              <button key={m.id} onClick={() => set({ mode: m.id })} style={{
+                flex: 1, padding:'10px', borderRadius: 10, cursor:'pointer',
+                background: on
+                  ? (dark ? 'rgba(217,251,74,.15)' : '#d9fb4a')
+                  : 'transparent',
+                border: on
+                  ? (dark ? '1px solid rgba(217,251,74,.45)' : '1px solid #c4e53e')
+                  : '1px solid transparent',
+                color: on
+                  ? (dark ? '#d9fb4a' : '#0a0a0c')
+                  : ink,
+                fontFamily:'Manrope', fontWeight: on ? 700 : 500, fontSize: 13,
+                boxShadow: on && !dark ? '0 2px 8px -2px rgba(217,251,74,.5)' : 'none',
+                transition: 'background .15s, color .15s',
+              }}>{m.label}</button>
+            );
+          })}
+        </div>
+
+        <FormLabel dark={dark}>Город</FormLabel>
+        <div style={{ display:'flex', flexWrap:'wrap', gap: 6, marginBottom: 12 }}>
+          {CITIES.map(c => (
+            <FormChip key={c.id} dark={dark} on={s.cityId === c.id} onClick={() => set({ cityId: c.id, pickupStore: '' })} small>{c.name}</FormChip>
+          ))}
+        </div>
+
+        {s.mode === 'delivery' && (
+          <>
+            <FormField dark={dark}>
+              <FormLabel dark={dark}>Адрес (улица, дом, квартира)</FormLabel>
+              <FormInput dark={dark} value={s.address} onChange={setAddress} placeholder="ул. Ленина, 12, кв. 45"/>
+            </FormField>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1.4fr', gap: 8, marginBottom: 8 }}>
+              <FormField dark={dark}>
+                <FormLabel dark={dark}>Этаж</FormLabel>
+                <FormInput dark={dark} value={s.floor} onChange={setFloor} placeholder="5" type="number" inputMode="numeric"/>
+              </FormField>
+              <div style={{ padding:'10px 14px', borderRadius: 14, background: surface2, border:`1px solid ${bord}` }}>
+                <FormLabel dark={dark}>Лифт</FormLabel>
+                <div style={{ display:'flex', gap: 6, marginTop: 4 }}>
+                  <FormChip dark={dark} on={s.lift === 'yes'} onClick={() => set({ lift: 'yes' })} small>есть</FormChip>
+                  <FormChip dark={dark} on={s.lift === 'no'}  onClick={() => set({ lift: 'no' })}  small>нет</FormChip>
+                </div>
+              </div>
+            </div>
+            <div style={{ padding:'10px 14px', borderRadius: 14, background: surface2, border:`1px solid ${bord}`, marginBottom: 8 }}>
+              <FormLabel dark={dark}>Куда занести</FormLabel>
+              <div style={{ display:'flex', gap: 6, marginTop: 4, flexWrap:'wrap' }}>
+                <FormChip dark={dark} on={s.destination === 'door'}  onClick={() => set({ destination: 'door' })}  small>в квартиру</FormChip>
+                <FormChip dark={dark} on={s.destination === 'entry'} onClick={() => set({ destination: 'entry' })} small>до подъезда</FormChip>
+                <FormChip dark={dark} on={s.destination === 'curb'}  onClick={() => set({ destination: 'curb' })}  small>до машины</FormChip>
+              </div>
+            </div>
+            <FormField dark={dark}>
+              <FormLabel dark={dark}>Комментарий курьеру (необязательно)</FormLabel>
+              <FormInput dark={dark} value={s.comment} onChange={setComment} placeholder="Домофон 45В, звонить за час"/>
+            </FormField>
+          </>
+        )}
+
+        {s.mode === 'pickup' && (
+          <>
+            <FormLabel dark={dark}>Филиал в городе «{cityObj.name}»</FormLabel>
+            <div style={{ display:'flex', flexDirection:'column', gap: 6 }}>
+              {pickupList.length === 0 ? (
+                <div style={{
+                  padding:'12px 14px', borderRadius: 12,
+                  background: surface2, border:`1px dashed ${bord}`,
+                  fontFamily:'Manrope', fontSize: 13, color: dim, fontStyle:'italic',
+                }}>В этом городе уточним филиал при звонке менеджера</div>
+              ) : pickupList.map((name, i) => {
+                const on = s.pickupStore === name;
+                return (
+                  <button key={i} onClick={() => set({ pickupStore: name })} style={{
+                    padding:'12px 14px', borderRadius: 12, cursor:'pointer', textAlign:'left',
+                    background: on ? 'rgba(217,251,74,.08)' : surface2,
+                    border: on ? '1px solid #d9fb4a' : `1px solid ${bord}`,
+                    color: ink, fontFamily:'Manrope', fontSize: 14, fontWeight: on ? 600 : 500,
+                    display:'flex', justifyContent:'space-between', alignItems:'center',
+                  }}>
+                    <span>{name}</span>
+                    {on && (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d9fb4a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20 6L9 17l-5-5"/>
+                      </svg>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </StepCard>
+
+      {/* ───── Step 4: Контакт ───── */}
+      <StepCard
+        dark={dark}
+        num="04" title="Как с вами связаться" sub="Менеджер перезвонит в течение 15 минут"
+        state={stepState(4)} summary={s.phone}
+        onNext={next} onEdit={() => editStep(4)} canNext={step4Valid} isLast={true}
+      >
+        <FormField dark={dark}>
+          <FormLabel dark={dark}>Телефон</FormLabel>
+          <FormInput dark={dark} value={s.phone} onChange={setPhone} placeholder="+7 ___ ___ __ __" type="tel" inputMode="tel"/>
+        </FormField>
+        <div style={{ fontFamily:'Manrope', fontStyle:'italic', fontWeight: 300, fontSize: 12, color: dim, marginTop: 8, lineHeight: 1.5 }}>
+          Отправляя заявку, вы соглашаетесь, что мы рассчитаем стоимость доставки и подтвердим наличие. Оплата — после согласования.
+        </div>
+      </StepCard>
+    </div>
+  );
+};
+
+// ══════════════════════════════════════════════════════════════
+//                      Receipt
+// ══════════════════════════════════════════════════════════════
+const Receipt = ({ order, dark, onClose }) => {
+  const ink = dark ? '#f0f0f3' : '#16161a';
+  const dim = dark ? 'rgba(255,255,255,.55)' : 'rgba(0,0,0,.55)';
+  const surface = dark ? '#0e0e11' : '#ffffff';
+  const bord = dark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)';
+
+  return (
+    <div style={{ padding:'56px 16px 40px', color: ink }}>
+      <button onClick={onClose} style={{
+        background:'transparent', border:'none', cursor:'pointer', color: ink,
+        fontFamily:'Manrope', fontSize: 14, fontWeight: 600, marginBottom: 12, padding: 0,
+        display:'flex', alignItems:'center', gap: 6,
+      }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={ink} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M15 18l-6-6 6-6"/>
+        </svg> Назад
+      </button>
+
+      <div style={{ fontFamily:'JetBrains Mono', fontSize: 10, letterSpacing:'.25em', color: dim, textTransform:'uppercase' }}>Чек · {order.id}</div>
+      <div style={{ fontFamily:'Unbounded', fontWeight: 800, fontSize: 26, letterSpacing:'-.01em', marginTop: 4 }}>{order.store}</div>
+      <div style={{ fontFamily:'Manrope', fontStyle:'italic', fontWeight: 300, color: dim, fontSize: 13, marginTop: 4 }}>{order.date} · {order.delivery}</div>
+
+      <div style={{
+        marginTop: 18, padding:'18px 20px', borderRadius: 20,
+        background:'linear-gradient(180deg, rgba(217,251,74,.12) 0%, rgba(217,251,74,.02) 100%)',
+        border:'1px solid rgba(217,251,74,.35)',
+      }}>
+        <div style={{ fontFamily:'JetBrains Mono', fontSize: 10, letterSpacing:'.22em', color:'#d9fb4a', fontWeight: 600 }}>ВАША РАЗНИЦА</div>
+        <div style={{ fontFamily:'Unbounded', fontWeight: 900, fontSize: 40, color: ink, letterSpacing:'-.02em', marginTop: 4 }}>
+          <em style={{ fontStyle:'normal', color:'#d9fb4a', fontSize: 26, marginRight: 6 }}>Δ</em>{rubM(order.save)}
+        </div>
+        <div style={{ fontFamily:'Manrope', fontSize: 12, color: dim, fontStyle:'italic', fontWeight: 300, marginTop: 2 }}>оптом дешевле на {(order.pct*100).toFixed(0)}% от розницы</div>
+      </div>
+
+      <div style={{ fontFamily:'JetBrains Mono', fontSize: 10, letterSpacing:'.25em', color: dim, textTransform:'uppercase', marginTop: 22, marginBottom: 8, marginLeft: 4 }}>Позиции</div>
+      <div style={{ borderRadius: 18, background: surface, border:`1px solid ${bord}`, overflow:'hidden' }}>
+        {order.items.map((it, i) => (
+          <div key={i} style={{
+            padding:'12px 14px', borderTop: i > 0 ? `1px solid ${bord}` : 'none',
+            display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap: 12,
+          }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily:'Manrope', fontSize: 13, fontWeight: 600, color: ink }}>{it.name}</div>
+              <div style={{ fontFamily:'Manrope', fontSize: 11, color: dim, marginTop: 2 }}>{it.qty} × {rubM(it.unit)}</div>
+            </div>
+            <div style={{ fontFamily:'Unbounded', fontWeight: 700, fontSize: 13, color: ink, whiteSpace:'nowrap' }}>{rubM(it.qty*it.unit)}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop: 12, padding:'14px 16px', borderRadius: 18, background: surface, border:`1px solid ${bord}` }}>
+        <div style={{ display:'flex', justifyContent:'space-between', fontFamily:'Manrope', fontSize: 13, color: dim, marginBottom: 6 }}>
+          <span>Розница</span><span style={{ textDecoration:'line-through' }}>{rubM(order.retail)}</span>
+        </div>
+        <div style={{ display:'flex', justifyContent:'space-between', fontFamily:'Manrope', fontSize: 13, color:'#d9fb4a', marginBottom: 8 }}>
+          <span>Разница ({(order.pct*100).toFixed(0)}%)</span><span>−{rubM(order.save)}</span>
+        </div>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', paddingTop: 10, borderTop:`1px dashed ${bord}` }}>
+          <span style={{ fontFamily:'Manrope', fontSize: 13, color: ink, fontWeight: 600 }}>К оплате</span>
+          <span style={{ fontFamily:'Unbounded', fontWeight: 800, fontSize: 22, color: ink }}>{rubM(order.amount)}</span>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 18, fontFamily:'JetBrains Mono', fontSize: 10, letterSpacing:'.18em', color: dim, textTransform:'uppercase', textAlign:'center' }}>
+        ОПЛАЧЕНО · {order.date}<br/>КАРТА {order.card}
+      </div>
+    </div>
+  );
+};
+
+// ══════════════════════════════════════════════════════════════
+//                      History screen — ВЫРОВНЕННАЯ ВЕРСТКА
+// ══════════════════════════════════════════════════════════════
+const HistoryScreen = ({ dark, orders, onOpenReceipt }) => {
+  const ink = dark ? '#f0f0f3' : '#16161a';
+  const dim = dark ? 'rgba(255,255,255,.55)' : 'rgba(0,0,0,.55)';
+  const surface = dark ? '#0e0e11' : '#ffffff';
+  const bord = dark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.06)';
+
+  const byMonth = orders.reduce((acc, o) => {
+    (acc[o.month] = acc[o.month] || []).push(o);
+    return acc;
+  }, {});
+
+  const totalSave = orders.reduce((a, o) => a + o.save, 0);
+  const totalSpent = orders.reduce((a, o) => a + o.amount, 0);
+
+  const monthBuckets = [
+    { key:'Н', label:'НОЯ', match:'НОЯБРЬ' },
+    { key:'Д', label:'ДЕК', match:'ДЕКАБРЬ' },
+    { key:'Я', label:'ЯНВ', match:'ЯНВАРЬ' },
+    { key:'Ф', label:'ФЕВ', match:'ФЕВРАЛЬ' },
+    { key:'М', label:'МАР', match:'МАРТ' },
+    { key:'А', label:'АПР', match:'АПРЕЛЬ' },
+  ];
+  const barVals = monthBuckets.map(b => {
+    const os = orders.filter(o => o.month.toUpperCase().includes(b.match));
+    return os.reduce((a,o) => a + o.save, 0);
+  });
+  const maxBar = Math.max(...barVals, 1);
+
+  // Empty state для нового пользователя
+  if (orders.length === 0) {
+    return (
+      <div style={{ padding:'56px 16px 40px', color: ink }}>
+        <div style={{ fontFamily:'Unbounded', fontWeight: 800, fontSize: 26, letterSpacing:'-.01em' }}>История</div>
+        <div style={{ fontFamily:'Manrope', fontStyle:'italic', fontWeight: 300, fontSize: 13, color: dim, marginTop: 4, marginBottom: 40 }}>
+          Здесь будут ваши заказы
+        </div>
+        <div style={{
+          padding:'40px 24px', borderRadius: 24, textAlign:'center',
+          background: surface, border:`1px dashed ${bord}`,
+        }}>
+          <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }}>📦</div>
+          <div style={{ fontFamily:'Unbounded', fontWeight: 700, fontSize: 18, color: ink, marginBottom: 8 }}>
+            Пока пусто
+          </div>
+          <div style={{ fontFamily:'Manrope', fontSize: 14, color: dim, lineHeight: 1.5 }}>
+            Оформите первую заявку — и история заказов появится здесь с графиком экономии
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding:'56px 16px 40px', color: ink }}>
+      <div style={{ fontFamily:'Unbounded', fontWeight: 800, fontSize: 26, letterSpacing:'-.01em' }}>История</div>
+      <div style={{ fontFamily:'Manrope', fontStyle:'italic', fontWeight: 300, fontSize: 13, color: dim, marginTop: 4, marginBottom: 16 }}>
+        {orders.length} заказов · сэкономлено {rubM(totalSave)}
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap: 10, marginBottom: 16 }}>
+        <div style={{ padding: 14, borderRadius: 16, background: surface, border:`1px solid ${bord}` }}>
+          <div style={{ fontFamily:'Manrope', fontSize: 10.5, color: dim, fontWeight: 500, letterSpacing:'.05em' }}>ОБОРОТ</div>
+          <div style={{ fontFamily:'Unbounded', fontWeight: 800, fontSize: 19, color: ink, marginTop: 4 }}>{rubM(totalSpent)}</div>
+        </div>
+        <div style={{
+          padding: 14, borderRadius: 16,
+          background: dark ? 'rgba(217,251,74,.1)' : 'rgba(217,251,74,.22)',
+          border:`1px solid ${dark ? 'rgba(217,251,74,.3)' : 'rgba(107,132,0,.35)'}`,
+        }}>
+          <div style={{
+            fontFamily:'Manrope', fontSize: 10.5,
+            color: dark ? '#d9fb4a' : '#526800',
+            fontWeight: 700, letterSpacing:'.05em',
+          }}>СЭКОНОМЛЕНО</div>
+          <div style={{ fontFamily:'Unbounded', fontWeight: 800, fontSize: 19, color: ink, marginTop: 4 }}>{rubM(totalSave)}</div>
+        </div>
+      </div>
+
+      <div style={{ padding:'14px 16px', borderRadius: 18, background: surface, border:`1px solid ${bord}`, marginBottom: 18 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 12 }}>
+          <div style={{ fontFamily:'JetBrains Mono', fontSize: 10, letterSpacing:'.22em', color: dim, textTransform:'uppercase' }}>Δ по месяцам</div>
+          <div style={{ fontFamily:'JetBrains Mono', fontSize: 10, color: dark ? '#d9fb4a' : '#6b8400', letterSpacing:'.1em', fontWeight: 700 }}>макс {Math.round(maxBar/1000)}К ₽</div>
+        </div>
+        <div style={{ display:'flex', alignItems:'flex-end', gap: 6, height: 110 }}>
+          {barVals.map((v, i) => {
+            const h = Math.max(6, (v / maxBar) * 90);
+            const isLast = i === barVals.length - 1;
+            return (
+              <div key={i} style={{ flex: 1, display:'flex', flexDirection:'column', alignItems:'center', gap: 5, height:'100%', justifyContent:'flex-end' }}>
+                <div style={{ fontFamily:'JetBrains Mono', fontSize: 9, color: isLast ? '#d9fb4a' : dim, fontWeight: 600, letterSpacing:'.02em' }}>
+                  {v >= 1000 ? `${Math.round(v/1000)}К` : '—'}
+                </div>
+                <div style={{ width:'100%', height:`${h}px`, borderRadius: 4, background: isLast ? '#d9fb4a' : (dark ? 'rgba(255,255,255,.15)' : 'rgba(0,0,0,.15)'), transition:'height .4s' }}/>
+                <div style={{ fontFamily:'JetBrains Mono', fontSize: 9, color: isLast ? ink : dim, letterSpacing:'.1em', fontWeight: isLast ? 700 : 400 }}>{monthBuckets[i].label}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {Object.entries(byMonth).map(([month, os]) => (
+        <div key={month} style={{ marginBottom: 14 }}>
+          <div style={{ fontFamily:'JetBrains Mono', fontSize: 10, letterSpacing:'.25em', color: dim, textTransform:'uppercase', marginLeft: 4, marginBottom: 6 }}>{month}</div>
+          <div style={{ borderRadius: 18, background: surface, border:`1px solid ${bord}`, overflow:'hidden' }}>
+            {os.map((o, i) => (
+              <div key={o.id} onClick={() => onOpenReceipt(o)} style={{
+                display:'flex', alignItems:'center', padding:'12px 14px', gap: 10,
+                borderTop: i > 0 ? `1px solid ${bord}` : 'none', cursor:'pointer',
+              }}>
+                <div style={{
+                  width: 38, height: 38, borderRadius: 10, flexShrink: 0,
+                  background: dark ? 'rgba(255,255,255,.04)' : 'rgba(0,0,0,.05)',
+                  display:'grid', placeItems:'center',
+                  fontFamily:'Unbounded', fontWeight: 800, fontSize: 14, color:'#d9fb4a',
+                }}>Δ</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily:'Manrope', fontSize: 14, fontWeight: 600, color: ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{o.store}</div>
+                  <div style={{ fontFamily:'Manrope', fontSize: 12, color: dim, fontStyle:'italic', fontWeight: 300, marginTop: 2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                    {o.date} · {(o.pct*100).toFixed(0)}%
+                  </div>
+                </div>
+                <div style={{ textAlign:'right', flexShrink: 0, minWidth: 96 }}>
+                  <div style={{ fontFamily:'Unbounded', fontWeight: 700, fontSize: 14, color: ink, whiteSpace:'nowrap' }}>{rubM(o.amount)}</div>
+                  <div style={{ fontFamily:'Manrope', fontSize: 11, color:'#d9fb4a', fontWeight: 600, whiteSpace:'nowrap' }}>−{rubM(o.save)}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// ══════════════════════════════════════════════════════════════
+//                      Partner screen — ПОЧИНЕН (referrals → list)
+// ══════════════════════════════════════════════════════════════
+const PartnerScreen = ({ dark }) => {
+  const ink = dark ? '#f0f0f3' : '#16161a';
+  const dim = dark ? 'rgba(255,255,255,.55)' : 'rgba(0,0,0,.55)';
+  const surface = dark ? '#0e0e11' : '#ffffff';
+  const bord = dark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.06)';
+  const { showSheet, showToast } = useUI();
+
+  const [mode, setMode] = useState('clients');
+  const [copied, setCopied] = useState(false);
+  const link = mode === 'clients' ? 'delta.ru/r/IP48291' : 'delta.ru/f/IP48291';
+
+  const copy = () => {
+    navigator.clipboard?.writeText('https://' + link).catch(()=>{});
+    setCopied(true);
+    showToast('Ссылка скопирована', 'ok');
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  const shareVia = (channel) => () => showToast(`Открываю ${channel}…`, 'ok');
+
+  // TODO: будет приходить с сервера через GET /api/partner/stats
+  const clients = [];
+  const factories = [];
+
+  const list = mode === 'clients' ? clients : factories;
+  const totalEarned = list.reduce((a, r) => a + r.earned, 0);
+  const totalOrders = list.reduce((a, r) => a + r.orders, 0);
+  const perOrder = mode === 'clients' ? '5%' : '1.5%';
+
+  return (
+    <div style={{ padding:'56px 16px 40px', color: ink }}>
+      <div style={{ fontFamily:'Unbounded', fontWeight: 800, fontSize: 26, letterSpacing:'-.01em' }}>Партнёр</div>
+      <div style={{ fontFamily:'Manrope', fontStyle:'italic', fontWeight: 300, fontSize: 13, color: dim, marginTop: 4, marginBottom: 16 }}>
+        {mode === 'clients'
+          ? 'Приводите покупателей — получайте % с их заказов'
+          : 'Подключайте производителей — получайте % с их оборота'}
+      </div>
+
+      {/* mode switcher */}
+      <div style={{ display:'flex', gap: 4, padding: 4, borderRadius: 14, background: surface, border:`1px solid ${bord}`, marginBottom: 14 }}>
+        {[
+          { id:'clients',   label:'Клиенты', sub: `${clients.length}` },
+          { id:'factories', label:'Заводы',  sub: `${factories.length}` },
+        ].map(t => {
+          const on = mode === t.id;
+          return (
+            <button key={t.id} onClick={() => setMode(t.id)} style={{
+              flex: 1, padding:'10px 8px', borderRadius: 10, cursor:'pointer',
+              background: on
+                ? (dark ? 'rgba(217,251,74,.12)' : '#d9fb4a')
+                : 'transparent',
+              border: on
+                ? (dark ? '1px solid rgba(217,251,74,.4)' : '1px solid #c4e53e')
+                : '1px solid transparent',
+              color: on
+                ? (dark ? '#d9fb4a' : '#0a0a0c')
+                : ink,
+              fontFamily:'Manrope', fontWeight: on ? 700 : 500, fontSize: 13,
+              display:'flex', alignItems:'center', justifyContent:'center', gap: 6,
+              boxShadow: on && !dark ? '0 2px 8px -2px rgba(217,251,74,.5)' : 'none',
+              transition: 'background .15s, color .15s',
+            }}>
+              {t.label}
+              <span style={{
+                fontFamily:'JetBrains Mono', fontSize: 10,
+                padding:'1px 6px', borderRadius: 999,
+                background: on
+                  ? (dark ? 'rgba(217,251,74,.2)' : 'rgba(10,10,12,.15)')
+                  : (dark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)'),
+                color: on
+                  ? (dark ? '#d9fb4a' : '#0a0a0c')
+                  : dim,
+                fontWeight: 700,
+              }}>{t.sub}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* earnings hero — premium business statement */}
+      {list.length === 0 ? (
+        <div style={{
+          padding:'32px 24px', borderRadius: 22, textAlign:'center',
+          background: surface, border:`1px dashed ${bord}`, marginBottom: 14,
+        }}>
+          <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }}>{mode === 'clients' ? '🤝' : '🏭'}</div>
+          <div style={{ fontFamily:'Unbounded', fontWeight: 700, fontSize: 18, color: ink, marginBottom: 8 }}>
+            {mode === 'clients' ? 'Приглашайте клиентов' : 'Подключайте заводы'}
+          </div>
+          <div style={{ fontFamily:'Manrope', fontSize: 14, color: dim, lineHeight: 1.5, marginBottom: 16 }}>
+            {mode === 'clients'
+              ? 'Отправьте свою реферальную ссылку — и получайте 2% с каждого заказа приведённого клиента'
+              : 'Подключите производителя — и получайте % с его оборота через платформу'}
+          </div>
+          <div style={{
+            display:'inline-block', padding:'10px 20px', borderRadius: 12,
+            background:'#d9fb4a', color:'#0a0a0c',
+            fontFamily:'Manrope', fontWeight: 700, fontSize: 13,
+          }}>
+            Скопировать ссылку
+          </div>
+        </div>
+      ) : (() => {
+        // Business-grade data
+        const sparkPoints = mode === 'clients'
+          ? [400, 800, 600, 1200, 1800, 1400, 2400]
+          : [1600, 2400, 1800, 4000, 5200, 6400, 8800];
+        const growth = mode === 'clients' ? 3.2 : 4.8;
+        const nextTier = mode === 'clients'
+          ? { name:'GOLD', current: totalEarned, target: 20000 }
+          : { name:'PRO',  current: totalEarned, target: 75000 };
+        const tierProgress = Math.min(1, nextTier.current / nextTier.target);
+        const nextPayoutDate = mode === 'clients' ? '20 апр 2026' : '30 апр 2026';
+        const nextPayoutAmt = mode === 'clients' ? 1200 : 3400;
+        const currentTier = mode === 'clients' ? 'SILVER' : 'GROWTH';
+
+        // Build sparkline SVG path
+        const spW = 120, spH = 36;
+        const spMax = Math.max(...sparkPoints);
+        const spMin = Math.min(...sparkPoints);
+        const spRange = spMax - spMin || 1;
+        const spPath = sparkPoints.map((v, i) => {
+          const x = (i / (sparkPoints.length - 1)) * spW;
+          const y = spH - ((v - spMin) / spRange) * spH;
+          return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+        }).join(' ');
+        const spAreaPath = spPath + ` L${spW},${spH} L0,${spH} Z`;
+
+        // Adaptive colors
+        const heroBg = dark
+          ? 'linear-gradient(155deg, #0a0a0d 0%, #14141a 55%, #1a1a22 100%)'
+          : 'linear-gradient(155deg, #ffffff 0%, #fafbfd 55%, #f5f6f9 100%)';
+        const heroBord = dark ? 'rgba(217,251,74,.22)' : 'rgba(0,0,0,.08)';
+        const heroText = dark ? '#fff' : '#16161a';
+        const heroDim = dark ? 'rgba(255,255,255,.5)' : 'rgba(0,0,0,.5)';
+        const heroDimmer = dark ? 'rgba(255,255,255,.45)' : 'rgba(0,0,0,.4)';
+        const heroFaint = dark ? 'rgba(255,255,255,.35)' : 'rgba(0,0,0,.32)';
+        const heroLine = dark ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.06)';
+        const heroInnerBg = dark ? 'rgba(255,255,255,.03)' : 'rgba(0,0,0,.025)';
+        const heroInnerBord = dark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.05)';
+        const heroProgressTrack = dark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.06)';
+        const heroRefBg = dark ? 'rgba(10,10,14,.8)' : 'rgba(245,246,249,.95)';
+
+        return (
+          <div style={{
+            borderRadius: 22, overflow:'hidden', marginBottom: 14,
+            background: heroBg,
+            border:`1px solid ${heroBord}`,
+            boxShadow: dark
+              ? '0 20px 50px -20px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.03) inset'
+              : '0 20px 50px -20px rgba(0,0,0,.12), 0 0 0 1px rgba(255,255,255,.6) inset',
+            position:'relative',
+          }}>
+            {/* subtle top shimmer */}
+            <div style={{
+              position:'absolute', top: 0, left: 0, right: 0, height: 1,
+              background:'linear-gradient(90deg, transparent 0%, rgba(217,251,74,.5) 50%, transparent 100%)',
+            }}/>
+            {/* glow orb top-right */}
+            <div style={{
+              position:'absolute', top:-60, right:-40, width: 180, height: 180,
+              background: dark
+                ? 'radial-gradient(circle, rgba(217,251,74,.15) 0%, transparent 65%)'
+                : 'radial-gradient(circle, rgba(217,251,74,.22) 0%, transparent 65%)',
+              filter:'blur(20px)', pointerEvents:'none',
+            }}/>
+
+            {/* TOP BAR — status line */}
+            <div style={{
+              padding:'14px 18px 12px',
+              display:'flex', alignItems:'center', justifyContent:'space-between',
+              borderBottom:`1px solid ${heroLine}`,
+              position:'relative', zIndex: 1,
+            }}>
+              <div style={{ display:'flex', alignItems:'center', gap: 8 }}>
+                <div style={{
+                  width: 6, height: 6, borderRadius:'50%', background:'#d9fb4a',
+                  boxShadow:'0 0 8px #d9fb4a',
+                }}/>
+                <div style={{ fontFamily:'JetBrains Mono', fontSize: 9.5, letterSpacing:'.24em', color: heroDim, fontWeight: 500 }}>
+                  {mode === 'clients' ? 'ПАРТНЁРСКАЯ ПРОГРАММА' : 'АГЕНТ ПО ЗАВОДАМ'}
+                </div>
+              </div>
+              <div style={{
+                fontFamily:'JetBrains Mono', fontSize: 9, letterSpacing:'.2em', fontWeight: 700,
+                padding:'3px 8px', borderRadius: 999,
+                background: dark
+                  ? 'linear-gradient(135deg, rgba(217,251,74,.18), rgba(217,251,74,.06))'
+                  : 'linear-gradient(135deg, rgba(217,251,74,.35), rgba(217,251,74,.15))',
+                border:'1px solid rgba(217,251,74,.4)',
+                color: dark ? '#d9fb4a' : '#6b8400',
+              }}>{currentTier}</div>
+            </div>
+
+            {/* MAIN — earnings + sparkline */}
+            <div style={{ padding:'18px 18px 16px', position:'relative', zIndex: 1 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap: 14 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily:'Manrope', fontSize: 11, color: heroDim, fontWeight: 500, letterSpacing:'.02em' }}>
+                    {mode === 'clients' ? 'Совокупный доход' : 'Доход от агентских'}
+                  </div>
+                  <div style={{
+                    fontFamily:'Unbounded', fontWeight: 800, fontSize: 38, letterSpacing:'-.035em',
+                    color: heroText, lineHeight: 1, marginTop: 4,
+                    display:'flex', alignItems:'baseline', gap: 2,
+                  }}>
+                    {rubM(totalEarned)}
+                  </div>
+                  <div style={{ display:'flex', alignItems:'center', gap: 6, marginTop: 6 }}>
+                    <div style={{
+                      fontFamily:'JetBrains Mono', fontSize: 10, fontWeight: 700,
+                      padding:'2px 6px', borderRadius: 4,
+                      background: dark ? 'rgba(74,220,130,.12)' : 'rgba(40,170,90,.12)',
+                      color: dark ? '#6ee39a' : '#289050',
+                      display:'flex', alignItems:'center', gap: 3,
+                    }}>
+                      <svg width="8" height="8" viewBox="0 0 8 8"><path d="M4 1L7 6H1L4 1Z" fill={dark ? '#6ee39a' : '#289050'}/></svg>
+                      +{growth}%
+                    </div>
+                    <div style={{ fontFamily:'Manrope', fontSize: 11, color: heroDim }}>
+                      к прошлому месяцу
+                    </div>
+                  </div>
+                </div>
+
+                {/* mini sparkline */}
+                <div style={{ flexShrink: 0 }}>
+                  <svg width={spW} height={spH + 12} viewBox={`0 0 ${spW} ${spH + 12}`} style={{ display:'block' }}>
+                    <defs>
+                      <linearGradient id={`sparkFill-${mode}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#d9fb4a" stopOpacity={dark ? "0.3" : "0.35"}/>
+                        <stop offset="100%" stopColor="#d9fb4a" stopOpacity="0"/>
+                      </linearGradient>
+                    </defs>
+                    <path d={spAreaPath} fill={`url(#sparkFill-${mode})`}/>
+                    <path d={spPath} stroke={dark ? '#d9fb4a' : '#8ba82a'} strokeWidth="1.6" fill="none" strokeLinejoin="round" strokeLinecap="round"/>
+                    <circle cx={spW} cy={spH - ((sparkPoints[sparkPoints.length-1] - spMin) / spRange) * spH} r="2.5" fill={dark ? '#d9fb4a' : '#8ba82a'}/>
+                  </svg>
+                  <div style={{ fontFamily:'JetBrains Mono', fontSize: 8.5, letterSpacing:'.18em', color: heroFaint, textAlign:'right', marginTop: -2 }}>
+                    7 МЕС
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* NEXT PAYOUT — statement line */}
+            <div style={{
+              margin:'0 18px',
+              padding:'12px 14px', borderRadius: 12,
+              background: heroInnerBg,
+              border:`1px solid ${heroInnerBord}`,
+              display:'flex', alignItems:'center', justifyContent:'space-between',
+              position:'relative', zIndex: 1,
+            }}>
+              <div>
+                <div style={{ fontFamily:'JetBrains Mono', fontSize: 9, letterSpacing:'.22em', color: heroDimmer, fontWeight: 500 }}>
+                  СЛЕДУЮЩАЯ ВЫПЛАТА
+                </div>
+                <div style={{ fontFamily:'Manrope', fontSize: 13, fontWeight: 600, color: heroText, marginTop: 3 }}>
+                  {nextPayoutDate}
+                </div>
+              </div>
+              <div style={{
+                fontFamily:'Unbounded', fontWeight: 800, fontSize: 20, letterSpacing:'-.02em',
+                color: dark ? '#d9fb4a' : '#6b8400',
+              }}>
+                +{rubM(nextPayoutAmt)}
+              </div>
+            </div>
+
+            {/* TIER PROGRESS */}
+            <div style={{
+              padding:'14px 18px 12px', marginTop: 12,
+              position:'relative', zIndex: 1,
+            }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom: 8 }}>
+                <div style={{ fontFamily:'JetBrains Mono', fontSize: 9.5, letterSpacing:'.22em', color: heroDim, fontWeight: 500 }}>
+                  ДО УРОВНЯ <span style={{ color: dark ? '#d9fb4a' : '#6b8400', fontWeight: 700 }}>{nextTier.name}</span>
+                </div>
+                <div style={{ fontFamily:'JetBrains Mono', fontSize: 11, color: heroText, fontWeight: 600, letterSpacing:'.05em' }}>
+                  {rubM(nextTier.current)} <span style={{ color: heroFaint }}>/ {rubM(nextTier.target)}</span>
+                </div>
+              </div>
+              <div style={{
+                height: 4, borderRadius: 999, background: heroProgressTrack, overflow:'hidden', position:'relative',
+              }}>
+                <div style={{
+                  position:'absolute', left: 0, top: 0, bottom: 0,
+                  width: `${tierProgress * 100}%`,
+                  background:'linear-gradient(90deg, #a8c93b 0%, #d9fb4a 100%)',
+                  borderRadius: 999,
+                  boxShadow:'0 0 8px rgba(217,251,74,.5)',
+                }}/>
+              </div>
+              <div style={{ fontFamily:'Manrope', fontSize: 11, fontStyle:'italic', fontWeight: 300, color: heroDim, marginTop: 8 }}>
+                Осталось <span style={{ color: heroText, fontStyle:'normal', fontWeight: 600 }}>{rubM(nextTier.target - nextTier.current)}</span> оборота до повышения ставки до <span style={{ color: dark ? '#d9fb4a' : '#6b8400', fontStyle:'normal', fontWeight: 600 }}>{mode === 'clients' ? '7%' : '2.2%'}</span>
+              </div>
+            </div>
+
+            {/* REFERRAL LINK — primary action */}
+            <div style={{
+              margin:'4px 18px 18px',
+              padding: 3, borderRadius: 14,
+              background:'linear-gradient(135deg, rgba(217,251,74,.2) 0%, rgba(217,251,74,.05) 100%)',
+              position:'relative', zIndex: 1,
+            }}>
+              <div style={{
+                borderRadius: 12,
+                background: heroRefBg, backdropFilter:'blur(10px)',
+                padding:'12px 14px',
+                display:'flex', alignItems:'center', gap: 10,
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily:'JetBrains Mono', fontSize: 8.5, letterSpacing:'.22em', color: heroDimmer, fontWeight: 500 }}>
+                    ВАША ССЫЛКА · {perOrder} С ОБОРОТА
+                  </div>
+                  <div style={{ fontFamily:'JetBrains Mono', fontSize: 13, color: heroText, marginTop: 3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontWeight: 500, letterSpacing:'.05em' }}>
+                    {link}
+                  </div>
+                </div>
+                <button onClick={copy} style={{
+                  padding:'10px 14px', borderRadius: 10, cursor:'pointer',
+                  background: copied ? '#d9fb4a' : 'linear-gradient(135deg, #d9fb4a 0%, #b8e035 100%)',
+                  border:'none', color:'#0a0a0c',
+                  fontFamily:'Manrope', fontSize: 12, fontWeight: 700, whiteSpace:'nowrap',
+                  boxShadow: copied ? 'none' : '0 4px 14px -4px rgba(217,251,74,.5)',
+                  letterSpacing:'.02em',
+                  display:'flex', alignItems:'center', gap: 5,
+                }}>
+                  {copied ? (
+                    <>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0a0a0c" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                      Ок
+                    </>
+                  ) : (
+                    <>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0a0a0c" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2"/>
+                        <path d="M5 15V5a2 2 0 012-2h10"/>
+                      </svg>
+                      Копировать
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* METRICS — grid 4, business labels */}
+            <div style={{
+              display:'grid', gridTemplateColumns:'repeat(4, 1fr)',
+              borderTop:`1px solid ${heroLine}`,
+              position:'relative', zIndex: 1,
+            }}>
+              {[
+                { v: list.length,  l: mode === 'clients' ? 'клиентов' : 'заводов' },
+                { v: totalOrders,  l: 'сделок' },
+                { v: list.length > 0 ? Math.round(totalEarned/Math.max(totalOrders,1)) : 0, l: '₽/сделку', fmt: true },
+                { v: perOrder,     l: 'ставка' },
+              ].map((s, i, arr) => (
+                <div key={i} style={{
+                  padding:'14px 10px',
+                  borderRight: i < arr.length - 1 ? `1px solid ${heroLine}` : 'none',
+                  textAlign:'center',
+                }}>
+                  <div style={{ fontFamily:'Unbounded', fontWeight: 800, fontSize: 18, color: heroText, letterSpacing:'-.02em', lineHeight: 1 }}>
+                    {s.fmt ? (s.v >= 1000 ? `${(s.v/1000).toFixed(1)}К` : s.v) : s.v}
+                  </div>
+                  <div style={{ fontFamily:'JetBrains Mono', fontSize: 8.5, letterSpacing:'.14em', color: heroDimmer, marginTop: 4, textTransform:'uppercase' }}>
+                    {s.l}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* share actions */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap: 8, marginBottom: 20 }}>
+        {[
+          { label:'Telegram', icon: <path d="M22 4L2 11l6 2 3 7 4-5 6 3 1-14z"/>, onClick: shareVia('Telegram') },
+          { label:'WhatsApp', icon: <path d="M21 12a9 9 0 11-3.3-6.9L21 3v6h-6"/>, onClick: shareVia('WhatsApp') },
+          { label:'SMS',      icon: <path d="M3 6a2 2 0 012-2h14a2 2 0 012 2v9a2 2 0 01-2 2H8l-5 5V6z"/>, onClick: shareVia('SMS') },
+          { label:'QR',
+            icon: <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,
+            onClick: () => showSheet({
+              eyebrow:'ВАШ QR',
+              title:'Отсканируйте для подключения',
+              body:'После сканирования партнёр получит вашу реф-ссылку.',
+              custom: <QRPlaceholder dark={dark}/>,
+              actions: [{ label:'Готово', kind:'primary' }],
+            })
+          },
+        ].map((a, i) => (
+          <button key={i} onClick={a.onClick} style={{
+            aspectRatio: 1, borderRadius: 14,
+            background: surface, border:`1px solid ${bord}`,
+            display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap: 5,
+            cursor:'pointer', color: ink,
+          }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={ink} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{a.icon}</svg>
+            <div style={{ fontFamily:'Manrope', fontSize: 10, fontWeight: 500 }}>{a.label}</div>
+          </button>
+        ))}
+      </div>
+
+      {/* network — использует list, а не undefined referrals */}
+      <div style={{ fontFamily:'JetBrains Mono', fontSize: 10, letterSpacing:'.25em', color: dim, textTransform:'uppercase', marginLeft: 4, marginBottom: 8 }}>Ваша сеть</div>
+      <div style={{ borderRadius: 18, background: surface, border:`1px solid ${bord}`, overflow:'hidden' }}>
+        {list.map((r, i) => (
+          <div key={i} style={{
+            padding:'12px 14px', display:'flex', alignItems:'center', gap: 10,
+            borderTop: i > 0 ? `1px solid ${bord}` : 'none',
+            paddingLeft: 14 + ((r.tier || 1) - 1) * 20,
+          }}>
+            <div style={{
+              width: 34, height: 34, borderRadius: 10, flexShrink: 0,
+              background: (r.tier || 1) === 1 ? 'rgba(217,251,74,.15)' : (dark ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.05)'),
+              color: (r.tier || 1) === 1 ? '#d9fb4a' : dim,
+              display:'grid', placeItems:'center',
+              fontFamily:'Unbounded', fontWeight: 800, fontSize: 12,
+            }}>L{r.tier || 1}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily:'Manrope', fontSize: 13, fontWeight: 600, color: ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.name}</div>
+              <div style={{ fontFamily:'Manrope', fontSize: 11, color: dim, marginTop: 1 }}>{r.orders} заказов</div>
+            </div>
+            <div style={{ fontFamily:'Unbounded', fontWeight: 700, fontSize: 13, color:'#d9fb4a', whiteSpace:'nowrap', flexShrink: 0 }}>+{rubM(r.earned)}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop: 14, padding:'12px 14px', borderRadius: 14, background: surface, border:`1px solid ${bord}` }}>
+        <div style={{ fontFamily:'JetBrains Mono', fontSize: 10, letterSpacing:'.22em', color: dim, marginBottom: 6 }}>КАК РАБОТАЕТ</div>
+        <div style={{ fontFamily:'Manrope', fontSize: 13, color: ink, lineHeight: 1.45 }}>
+          {mode === 'clients'
+            ? '5% с каждого заказа прямого реферала, 2% со второго уровня. Выплаты еженедельно на карту.'
+            : '1.5% с каждого заказа через подключённый завод. Выплаты ежемесячно.'}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ══════════════════════════════════════════════════════════════
+//                      Profile screen
+// ══════════════════════════════════════════════════════════════
+const ProfileScreen = ({ dark, onToggleTheme }) => {
+  const ink = dark ? '#f0f0f3' : '#16161a';
+  const dim = dark ? 'rgba(255,255,255,.55)' : 'rgba(0,0,0,.55)';
+  const surface = dark ? '#0e0e11' : '#ffffff';
+  const bord = dark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.06)';
+  const { showSheet, showToast } = useUI();
+  const [notif, setNotif] = useState(true);
+  const [lang, setLang] = useState('Русский');
+
+  const Row = ({ title, right, onClick, danger }) => (
+    <div onClick={onClick} style={{
+      padding:'14px 16px', display:'flex', alignItems:'center', gap: 12,
+      borderTop:`1px solid ${bord}`, cursor: onClick ? 'pointer' : 'default',
+    }}>
+      <div style={{ flex: 1, fontFamily:'Manrope', fontSize: 14, fontWeight: 500, color: danger ? '#ff6680' : ink }}>{title}</div>
+      {typeof right === 'string'
+        ? <div style={{ fontFamily:'Manrope', fontSize: 13, color: dim }}>{right}</div>
+        : right}
+      {onClick && !danger && (
+        <svg width="8" height="14" viewBox="0 0 8 14" style={{ flexShrink: 0 }}>
+          <path d="M1 1l6 6-6 6" stroke={dim} strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      )}
+    </div>
+  );
+
+  return (
+    <div style={{ padding:'56px 16px 40px', color: ink }}>
+      <div style={{ display:'flex', alignItems:'center', gap: 14, marginBottom: 22 }}>
+        <div style={{
+          width: 64, height: 64, borderRadius: 20,
+          background:'linear-gradient(135deg, #d9fb4a 0%, #8fa628 100%)',
+          display:'grid', placeItems:'center',
+          fontFamily:'Unbounded', fontWeight: 900, fontSize: 26, color:'#0a0a0c',
+          boxShadow:'0 8px 20px -6px rgba(217,251,74,.5)',
+        }}>ИП</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily:'Unbounded', fontWeight: 800, fontSize: 20, letterSpacing:'-.01em' }}>Иван Петров</div>
+          <div style={{ fontFamily:'Manrope', fontSize: 13, color: dim, marginTop: 2 }}>ИП «СтройМонтаж» · ID 48291</div>
+          <div style={{
+            display:'inline-block', marginTop: 6,
+            padding:'3px 9px', borderRadius: 999,
+            fontFamily:'JetBrains Mono', fontSize: 9.5, letterSpacing:'.2em', fontWeight: 700,
+            background: dark ? 'rgba(217,251,74,.12)' : 'rgba(217,251,74,.25)',
+            color: dark ? '#d9fb4a' : '#526800',
+            border:`1px solid ${dark ? 'rgba(217,251,74,.3)' : 'rgba(107,132,0,.4)'}`,
+          }}>КЛИЕНТ · 2-Й ГОД</div>
+        </div>
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap: 8, marginBottom: 18 }}>
+        {[
+          { v: String(ORDERS.length),  l:'заказов' },
+          { v:'15%', l:'скидка' },
+          { v: ORDERS.length > 0 ? rubM(ORDERS.reduce((a,o) => a + o.save, 0)).replace(' ₽','') : '0', l:'сэкономлено' },
+        ].map((s, i) => (
+          <div key={i} style={{ padding: 12, borderRadius: 14, background: surface, border:`1px solid ${bord}`, textAlign:'center' }}>
+            <div style={{ fontFamily:'Unbounded', fontWeight: 800, fontSize: 20, color: dark ? '#d9fb4a' : '#6b8400', letterSpacing:'-.02em' }}>{s.v}</div>
+            <div style={{ fontFamily:'Manrope', fontSize: 11, color: dim, marginTop: 2 }}>{s.l}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ fontFamily:'JetBrains Mono', fontSize: 10, letterSpacing:'.25em', color: dim, textTransform:'uppercase', marginLeft: 4, marginBottom: 6 }}>Карта</div>
+      <div style={{ borderRadius: 18, background: surface, border:`1px solid ${bord}`, overflow:'hidden', marginBottom: 14 }}>
+        <div style={{ padding:'14px 16px' }}>
+          <div style={{ fontFamily:'JetBrains Mono', fontSize: 10, letterSpacing:'.22em', color: dim }}>НОМЕР КАРТЫ</div>
+          <div style={{ fontFamily:'JetBrains Mono', fontWeight: 500, fontSize: 15, color: ink, letterSpacing:'.1em', marginTop: 2 }}>DLT · 4182 · 0907 · 2611</div>
+        </div>
+        <Row title="Действует до" right="08 / 2030"/>
+        <Row title="Добавить в Apple Wallet" onClick={() => showSheet({
+          eyebrow:'APPLE WALLET',
+          title:'Добавить Δ карту?',
+          body:'Карта появится в Wallet. Можно оплачивать через Face ID.',
+          actions:[
+            { label:'Добавить', kind:'primary', onClick: () => showToast('Карта добавлена в Wallet', 'ok') },
+            { label:'Отмена' },
+          ],
+        })}/>
+      </div>
+
+      <div style={{ fontFamily:'JetBrains Mono', fontSize: 10, letterSpacing:'.25em', color: dim, textTransform:'uppercase', marginLeft: 4, marginBottom: 6 }}>Настройки</div>
+      <div style={{ borderRadius: 18, background: surface, border:`1px solid ${bord}`, overflow:'hidden', marginBottom: 14 }}>
+        <div style={{ padding:'14px 16px', display:'flex', alignItems:'center' }}>
+          <div style={{ flex: 1, fontFamily:'Manrope', fontSize: 14, fontWeight: 500 }}>Тёмная тема</div>
+          <button onClick={onToggleTheme} style={{
+            width: 48, height: 28, borderRadius: 999, cursor:'pointer', position:'relative',
+            background: dark ? '#d9fb4a' : 'rgba(0,0,0,.15)',
+            border:'none', padding: 0,
+          }}>
+            <div style={{
+              position:'absolute', top: 3, left: dark ? 23 : 3, width: 22, height: 22,
+              borderRadius:'50%', background:'#fff', transition:'left .2s',
+              boxShadow:'0 1px 3px rgba(0,0,0,.2)',
+            }}/>
+          </button>
+        </div>
+        <div style={{ padding:'14px 16px', display:'flex', alignItems:'center', borderTop:`1px solid ${bord}` }}>
+          <div style={{ flex: 1, fontFamily:'Manrope', fontSize: 14, fontWeight: 500 }}>Уведомления</div>
+          <button onClick={() => { setNotif(!notif); showToast(notif ? 'Уведомления выключены' : 'Уведомления включены', 'ok'); }} style={{
+            width: 48, height: 28, borderRadius: 999, cursor:'pointer', position:'relative',
+            background: notif ? '#d9fb4a' : (dark ? 'rgba(255,255,255,.15)' : 'rgba(0,0,0,.15)'),
+            border:'none', padding: 0,
+          }}>
+            <div style={{
+              position:'absolute', top: 3, left: notif ? 23 : 3, width: 22, height: 22,
+              borderRadius:'50%', background:'#fff', transition:'left .2s',
+              boxShadow:'0 1px 3px rgba(0,0,0,.2)',
+            }}/>
+          </button>
+        </div>
+        <Row title="Язык" right={lang} onClick={() => showSheet({
+          title:'Выбор языка',
+          actions: ['Русский','English','Қазақша','Беларуская'].map(l => ({
+            label: l + (l === lang ? '  ✓' : ''),
+            onClick: () => { setLang(l); showToast(`Язык: ${l}`, 'ok'); },
+          })).concat([{ label:'Отмена' }]),
+        })}/>
+      </div>
+
+      <div style={{ borderRadius: 18, background: surface, border:`1px solid ${bord}`, overflow:'hidden' }}>
+        <Row title="Помощь · поддержка" onClick={() => showSheet({
+          eyebrow:'ПОДДЕРЖКА · 24/7',
+          title:'Связаться с поддержкой',
+          body:'Обычное время ответа — 5 минут.',
+          actions:[
+            { label:'Чат в Telegram', kind:'primary', onClick: () => showToast('Открываю @delta_support…', 'ok') },
+            { label:'Позвонить 8 800 500-40-40', onClick: () => showToast('Звонок…', 'ok') },
+            { label:'Написать на help@delta.ru', onClick: () => showToast('Открываю почту…', 'ok') },
+            { label:'Отмена' },
+          ],
+        })}/>
+        <Row title="Выйти" onClick={() => showSheet({
+          title:'Выйти из аккаунта?',
+          body:'Вы выйдете из приложения. Данные карты сохранятся.',
+          actions:[
+            { label:'Выйти', kind:'danger', onClick: () => showToast('Вы вышли из аккаунта', 'ok') },
+            { label:'Отмена' },
+          ],
+        })} danger/>
+      </div>
+
+      <div style={{ fontFamily:'JetBrains Mono', fontSize: 9.5, letterSpacing:'.2em', color: dim, textTransform:'uppercase', textAlign:'center', marginTop: 18 }}>
+        ДЕЛЬТА · v 1.4.0
+      </div>
+    </div>
+  );
+};
+
+// ══════════════════════════════════════════════════════════════
+//                      TabBar
+// ══════════════════════════════════════════════════════════════
+const TabIcon = ({ name, active, dark }) => {
+  const stroke = active ? '#d9fb4a' : (dark ? 'rgba(255,255,255,.55)' : 'rgba(0,0,0,.55)');
+  const sw = 1.8;
+  const common = { width: 24, height: 24, fill:'none', stroke, strokeWidth: sw, strokeLinecap:'round', strokeLinejoin:'round' };
+  switch (name) {
+    case 'card':
+      return (<svg {...common} viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="14" rx="2.5"/><path d="M2 11h20"/><path d="M6 16h4"/></svg>);
+    case 'calc':
+      return (
+        <svg {...common} viewBox="0 0 24 24">
+          <rect x="4" y="2" width="16" height="20" rx="2.5"/>
+          <rect x="7" y="5" width="10" height="4" rx="1" fill={active ? '#d9fb4a' : 'none'} stroke={stroke}/>
+          <circle cx="8" cy="13" r=".6" fill={stroke} stroke="none"/>
+          <circle cx="12" cy="13" r=".6" fill={stroke} stroke="none"/>
+          <circle cx="16" cy="13" r=".6" fill={stroke} stroke="none"/>
+          <circle cx="8" cy="16.5" r=".6" fill={stroke} stroke="none"/>
+          <circle cx="12" cy="16.5" r=".6" fill={stroke} stroke="none"/>
+          <circle cx="16" cy="16.5" r=".6" fill={stroke} stroke="none"/>
+        </svg>
+      );
+    case 'history':
+      return (<svg {...common} viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>);
+    case 'partner':
+      return (
+        <svg {...common} viewBox="0 0 24 24">
+          <circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/>
+          <path d="M3 20c0-3 2.5-5 5-5s5 2 5 5"/>
+          <path d="M11 20c0-3 2.5-5 5-5s5 2 5 5"/>
+        </svg>
+      );
+    case 'profile':
+      return (<svg {...common} viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7"/></svg>);
+  }
+};
+
+const TabBar = ({ active, onChange, dark }) => {
+  const tabs = [
+    { id:'card',    label:'Карта' },
+    { id:'calc',    label:'Расчёт' },
+    { id:'history', label:'История' },
+    { id:'partner', label:'Партнёр' },
+    { id:'profile', label:'Профиль' },
+  ];
+  const bg = dark ? 'rgba(14,14,18,.85)' : 'rgba(250,250,252,.88)';
+  const border = dark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)';
+  return (
+    <div style={{
+      position:'absolute', left: 8, right: 8, bottom: 42, zIndex: 40,
+      borderRadius: 28, padding:'8px 6px 10px',
+      background: bg,
+      backdropFilter:'blur(20px) saturate(180%)',
+      WebkitBackdropFilter:'blur(20px) saturate(180%)',
+      border:`1px solid ${border}`,
+      boxShadow: dark ? '0 10px 30px -10px rgba(0,0,0,.6)' : '0 10px 30px -10px rgba(0,0,0,.15)',
+      display:'flex', justifyContent:'space-around', alignItems:'center',
+    }}>
+      {tabs.map(t => (
+        <button key={t.id} onClick={() => onChange(t.id)} style={{
+          background:'transparent', border:'none', cursor:'pointer',
+          padding:'6px 8px', display:'flex', flexDirection:'column', alignItems:'center', gap: 3, minWidth: 54,
+        }}>
+          <TabIcon name={t.id} active={active === t.id} dark={dark}/>
+          <div style={{
+            fontFamily:'Manrope, sans-serif', fontSize: 10.5, fontWeight: 600,
+            color: active === t.id ? '#d9fb4a' : (dark ? 'rgba(255,255,255,.55)' : 'rgba(0,0,0,.55)'),
+            letterSpacing:'.02em',
+          }}>{t.label}</div>
+        </button>
+      ))}
+    </div>
+  );
+};
+
+// ══════════════════════════════════════════════════════════════
+//                      App — скролл ОТДЕЛЬНО от TabBar
+// ══════════════════════════════════════════════════════════════
+function App(){
+  // ─── Telegram Mini App detection ──────────────────────────────
+  const tg = typeof window !== 'undefined' && window.Telegram && window.Telegram.WebApp;
+  // TMA считается активным только если реально запущен из Telegram (есть initData или platform не 'unknown')
+  const isTMA = !!(tg && (tg.initData || (tg.platform && tg.platform !== 'unknown')));
+
+  // ─── Delta · Telegram user + реферальная атрибуция ──────────
+  const tgUser = tg?.initDataUnsafe?.user || null;
+  const cardHolder = tgUser
+    ? [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ').toUpperCase()
+    : 'ДЕРЖАТЕЛЬ КАРТЫ';
+  const startParam = tg?.initDataUnsafe?.start_param || null;
+  // Кладём на window чтобы не тащить через props сквозь всё дерево
+  window.__delta = Object.assign(window.__delta || {}, {
+    isTMA, tgUser, cardHolder, startParam
+  });
+
+  const [dark, setDark] = useState(() => {
+    // В TMA — следуем theme Telegram, в браузере — localStorage или default dark
+    if (isTMA && tg.colorScheme) return tg.colorScheme === 'dark';
+    try {
+      const saved = localStorage.getItem('delta-mobile-dark');
+      return saved !== null ? saved === 'true' : true;
+    } catch(e) { return true; }
+  });
+  const [tab, setTab] = useState(() => {
+    try { return localStorage.getItem('delta-mobile-tab') || 'onboard'; } catch(e) { return 'onboard'; }
+  });
+  const [receipt, setReceipt] = useState(null);
+  const [calc, setCalc] = useState({
+    cart: '',
+    amount: 100000,
+    mode: 'delivery',   // 'delivery' | 'pickup'
+    cityId: 'msk',
+    address: '',
+    floor: '',
+    lift: 'yes',
+    destination: 'door',
+    comment: '',
+    pickupStore: '',
+    phone: '',
+  });
+
+  // ─── Init Telegram WebApp once on mount ────────────────────────
+  useEffect(() => {
+    if (!isTMA) return;
+    try {
+      tg.ready();
+      tg.expand(); // растянуть до максимальной высоты
+      if (tg.setHeaderColor) tg.setHeaderColor('#0a0a0f');
+      if (tg.setBackgroundColor) tg.setBackgroundColor('#050507');
+      // Применяем класс для fullscreen-вёрстки
+      document.body.classList.add('tma');
+      // Реагируем на смену темы Telegram
+      tg.onEvent?.('themeChanged', () => {
+        if (tg.colorScheme) setDark(tg.colorScheme === 'dark');
+      });
+    } catch(e) { /* no-op */ }
+  }, []);
+
+  // ─── BackButton — в чеке и в онбординге ────────────────────────
+  useEffect(() => {
+    if (!isTMA || !tg.BackButton) return;
+    if (receipt) {
+      tg.BackButton.show();
+      const handler = () => setReceipt(null);
+      tg.BackButton.onClick(handler);
+      return () => {
+        tg.BackButton.offClick(handler);
+        tg.BackButton.hide();
+      };
+    } else {
+      tg.BackButton.hide();
+    }
+  }, [receipt, isTMA]);
+
+  // ─── Haptic feedback на смену таба ─────────────────────────────
+  const handleTabChange = (newTab) => {
+    if (isTMA && tg.HapticFeedback) {
+      try { tg.HapticFeedback.selectionChanged(); } catch(e) {}
+    }
+    setTab(newTab);
+  };
+
+  useEffect(() => {
+    try { localStorage.setItem('delta-mobile-dark', dark); } catch(e) {}
+    // В TMA body.tma остаётся, в браузере — dark/light
+    if (!isTMA) {
+      document.body.className = dark ? 'dark' : 'light';
+    } else {
+      document.body.classList.toggle('light', !dark);
+      document.body.classList.toggle('dark', dark);
+    }
+  }, [dark, isTMA]);
+
+  useEffect(() => {
+    try {
+      if (tab !== 'onboard') localStorage.setItem('delta-mobile-tab', tab);
+    } catch(e) {}
+  }, [tab]);
+
+  // Фиксированная скидка 15% — показываем её везде где нужен pct
+  const curPct = 0.15;
+
+  const showTabBar = tab !== 'onboard' && !receipt;
+
+  let screen = null;
+  if (tab === 'onboard') {
+    screen = <Onboarding dark={dark} onDone={() => handleTabChange('card')}/>;
+  } else if (receipt) {
+    screen = <Receipt order={receipt} dark={dark} onClose={() => setReceipt(null)}/>;
+  } else if (tab === 'card') {
+    screen = <CardScreen pct={curPct} dark={dark}/>;
+  } else if (tab === 'calc') {
+    screen = <CalcScreen dark={dark} state={calc} setState={setCalc} onShowCard={() => handleTabChange('card')}/>;
+  } else if (tab === 'history') {
+    screen = <HistoryScreen dark={dark} orders={ORDERS} onOpenReceipt={setReceipt}/>;
+  } else if (tab === 'partner') {
+    screen = <PartnerScreen dark={dark}/>;
+  } else if (tab === 'profile') {
+    screen = <ProfileScreen dark={dark} onToggleTheme={() => setDark(!dark)}/>;
+  }
+
+  // dynamic bottom padding depending on tab bar visibility
+  const scrollBottomPad = showTabBar ? 120 : 40;
+
+  // ─── Shared inner content ──────────────────────────────────────
+  const inner = (
+    <div style={{
+      position:'relative', width:'100%', height:'100%',
+      background: dark ? '#050507' : '#F2F2F7',
+    }}>
+      <UIProvider dark={dark}>
+        <div style={{
+          position:'absolute', inset: 0,
+          overflowY:'auto', overflowX:'hidden',
+          paddingBottom: scrollBottomPad,
+          // В TMA используем safe-area insets
+          paddingTop: isTMA ? 'env(safe-area-inset-top, 0)' : 0,
+        }}>
+          {screen}
+        </div>
+        {showTabBar && <TabBar active={tab} onChange={handleTabChange} dark={dark}/>}
+      </UIProvider>
+    </div>
+  );
+
+  // ─── TMA: fullscreen ─────────────────────────────────────────
+  if (isTMA) {
+    return (
+      <div style={{
+        width:'100%', height:'100%', minHeight:'100vh',
+        position:'relative', overflow:'hidden',
+        background: dark ? '#050507' : '#F2F2F7',
+      }}>
+        {inner}
+      </div>
+    );
+  }
+
+  // ─── Browser demo: iOS frame ─────────────────────────────────
+  return (
+    <IOSDevice dark={dark} width={390} height={844}>
+      {inner}
+    </IOSDevice>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
