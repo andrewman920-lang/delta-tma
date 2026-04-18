@@ -1873,12 +1873,16 @@ const PartnerScreen = ({ dark }) => {
               ? 'Отправьте свою реферальную ссылку — и получайте 2% с каждого заказа приведённого клиента'
               : 'Подключите производителя — и получайте % с его оборота через платформу'}
           </div>
-          <div style={{
-            display:'inline-block', padding:'10px 20px', borderRadius: 12,
-            background:'#d9fb4a', color:'#0a0a0c',
-            fontFamily:'Manrope', fontWeight: 700, fontSize: 13,
-          }}>
-            Скопировать ссылку
+          <div
+            onClick={copy}
+            style={{
+              display:'inline-block', padding:'10px 20px', borderRadius: 12,
+              background: copied ? '#b8e63a' : '#d9fb4a', color:'#0a0a0c',
+              fontFamily:'Manrope', fontWeight: 700, fontSize: 13,
+              cursor:'pointer', userSelect:'none',
+            }}
+          >
+            {copied ? '✓ Скопировано' : 'Скопировать ссылку'}
           </div>
         </div>
       ) : (() => {
