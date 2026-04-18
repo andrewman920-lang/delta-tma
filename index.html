@@ -1738,9 +1738,7 @@ const PartnerScreen = ({ dark }) => {
     || 'GUEST';
   const botUser = 'Delta_partner_bot';
   const appName = 'delta';
-  const link = mode === 'clients'
-    ? `t.me/${botUser}/${appName}?startapp=${refCode}`
-    : `t.me/${botUser}?start=${refCode}`;
+  const link = `t.me/${botUser}?start=${refCode}`;
 
   const copy = () => {
     const fullUrl = 'https://' + link;
