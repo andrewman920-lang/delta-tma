@@ -1730,16 +1730,76 @@ const PartnerScreen = ({ dark }) => {
 
   const [mode, setMode] = useState('clients');
   const [copied, setCopied] = useState(false);
-  const link = mode === 'clients' ? 'delta.ru/r/IP48291' : 'delta.ru/f/IP48291';
+
+  // ─── Delta · Настоящая реф-ссылка на бота ─────────────────
+  const delta = (typeof window !== 'undefined' && window.__delta) || {};
+  const refCode = delta.startParam
+    || (delta.tgUser && ('U' + delta.tgUser.id))
+    || 'GUEST';
+  const botUser = 'Delta_partner_bot';
+  const appName = 'delta';
+  const link = mode === 'clients'
+    ? `t.me/${botUser}/${appName}?startapp=${refCode}`
+    : `t.me/${botUser}?start=${refCode}`;
 
   const copy = () => {
-    navigator.clipboard?.writeText('https://' + link).catch(()=>{});
-    setCopied(true);
-    showToast('Ссылка скопирована', 'ok');
-    setTimeout(() => setCopied(false), 1500);
+    const fullUrl = 'https://' + link;
+    const tg = window.Telegram?.WebApp;
+    let success = false;
+    // 1) нативный clipboard API (работает в браузере, иногда в TMA)
+    try {
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(fullUrl);
+        success = true;
+      }
+    } catch (e) {}
+    // 2) фолбэк через скрытый textarea (работает почти везде, включая TMA)
+    if (!success) {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = fullUrl;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.top = '0';
+        ta.style.left = '0';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        ta.setSelectionRange(0, fullUrl.length);
+        success = document.execCommand('copy');
+        document.body.removeChild(ta);
+      } catch (e) {}
+    }
+    if (success) {
+      try { tg?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+      setCopied(true);
+      showToast('Ссылка скопирована', 'ok');
+      setTimeout(() => setCopied(false), 1500);
+    } else {
+      // 3) крайний случай — открываем Telegram-шара, пусть пользователь
+      //    сам выберет куда вставить
+      if (tg?.openTelegramLink) {
+        tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(fullUrl)}`);
+      } else {
+        showToast('Скопируйте вручную: ' + fullUrl, 'default');
+      }
+    }
   };
 
-  const shareVia = (channel) => () => showToast(`Открываю ${channel}…`, 'ok');
+  const shareVia = (channel) => () => {
+    const fullUrl = 'https://' + link;
+    const tg = window.Telegram?.WebApp;
+    const text = mode === 'clients'
+      ? 'ДЕЛЬТА — закупаем стройматериалы в Леруа и Петровиче на 15% дешевле. Попробуй 👉'
+      : 'ДЕЛЬТА — цифровой дистрибутор стройматериалов.';
+    if (tg?.openTelegramLink) {
+      tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(fullUrl)}&text=${encodeURIComponent(text)}`);
+    } else if (navigator.share) {
+      navigator.share({ title: 'ДЕЛЬТА', text, url: fullUrl }).catch(()=>{});
+    } else {
+      showToast(`Открываю ${channel}…`, 'ok');
+    }
+  };
 
   // TODO: будет приходить с сервера через GET /api/partner/stats
   const clients = [];
